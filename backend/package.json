@@ -1,0 +1,40 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "seed:products": "node src/seeds/index.js",
+    "make-admin": "node src/scripts/make-admin.js",
+    "migrate:categories": "node scripts/migrate-categories.js",
+    "backup:db": "node scripts/backup-db.js",
+    "backup:full": "node scripts/full-backup.js",
+    "verify:restore": "node scripts/verify-restore.js",
+    "stats:db": "node scripts/db-stats.js",
+    "build:web": "npm --prefix ../web-storefront install && npm --prefix ../web-storefront run build && node scripts/copy-dist.js",
+    "restore:db": "node scripts/restore-db.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "hpp": "^0.2.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.19.3",
+    "multer": "^2.0.2",
+    "nodemailer": "^9.0.1",
+    "razorpay": "^2.9.5",
+    "uuid": "^11.1.0",
+    "xss-clean": "^0.1.4"
+  }
+}

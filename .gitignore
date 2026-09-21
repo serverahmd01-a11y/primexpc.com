@@ -1,0 +1,55 @@
+# ================= DEPENDENCIES =================
+node_modules/
+
+# ================= ENVIRONMENT / SECRETS =================
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.production
+!.env.development
+
+# ================= LOGS =================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ================= BUILD OUTPUT =================
+# Frontend build is copied into backend/dist and committed for deployment.
+web-storefront/dist/
+dist-ssr/
+
+# ================= DATABASE BACKUPS =================
+# Backups may contain customer data - never commit.
+backend/backups/
+backend/mongo-dump/
+backend/*.zip
+backend/*-dump.*
+backend/db-stats-report.txt
+
+# ================= LOCAL SCRIPTS WITH SECRETS =================
+# Contains hardcoded credentials - keep local only.
+backend/seed-admin.js
+
+# ================= USER UPLOADS =================
+# Images/videos live in a persistent folder on the server (UPLOADS_DIR).
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# ================= EDITOR / OS =================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ================= MISC =================
+*.local
+.cache/
