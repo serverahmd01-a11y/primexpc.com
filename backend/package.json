@@ -13,7 +13,7 @@
     "backup:full": "node scripts/full-backup.js",
     "verify:restore": "node scripts/verify-restore.js",
     "stats:db": "node scripts/db-stats.js",
-    "build:web": "npm --prefix ../web-storefront install && npm --prefix ../web-storefront run build && node scripts/copy-dist.js",
+    "build:web": "npm --prefix ../web-storefront install --include=dev && npm --prefix ../web-storefront run build && node scripts/copy-dist.js",
     "restore:db": "node scripts/restore-db.js"
   },
   "keywords": [],
