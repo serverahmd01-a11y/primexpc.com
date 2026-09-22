@@ -84,13 +84,13 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization", "x-guest-id"],
 }));
 
-app.use(generalLimiter);
-
 app.use("/uploads", express.static(ENV.UPLOADS_DIR, {
   maxAge: "1d",
   dotfiles: "deny",
   index: false,
 }));
+
+app.use(generalLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/admin/shiprocket", shiprocketRoutes);
