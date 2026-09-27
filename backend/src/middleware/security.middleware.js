@@ -68,9 +68,13 @@ export const securityHeaders = helmet({
 
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isProduction ? 200 : 10000,
+  max: isProduction ? 5000 : 10000,
   standardHeaders: true,
   legacyHeaders: false,
+  // Normal browsing (GET/HEAD) is not throttled here - only writes are.
+  // Read endpoints are cheap and heavily cached; throttling them caused
+  // the whole site to 429 under load when many users shared a proxy IP.
+  skip: (req) => req.method === "GET" || req.method === "HEAD",
   message: { message: "Too many requests, please try again later." },
 });
 
