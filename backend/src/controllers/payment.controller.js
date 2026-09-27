@@ -26,10 +26,12 @@ export async function createRazorpayOrder(req, res) {
     }
 
     const cart = await Cart.findOne({ user: user._id }).populate("items.product");
-    const cartSubtotal = cart
-      ? cart.items.reduce((sum, i) => sum + (i.product.salePrice || i.product.price || 0) * i.quantity, 0)
-      : 0;
-    if (!cart || cart.items.length === 0) {
+    const validItems = cart ? cart.items.filter((i) => i.product) : [];
+    const cartSubtotal = validItems.reduce(
+      (sum, i) => sum + (i.product.salePrice || i.product.price || 0) * i.quantity,
+      0
+    );
+    if (!cart || validItems.length === 0) {
       return res.status(400).json({ error: "Cart is empty" });
     }
 
@@ -133,11 +135,12 @@ export async function handleWebhook(req, res) {
       const notes = payment.notes || {};
 
       const cart = await Cart.findOne({ user: notes.userId }).populate("items.product");
-      if (!cart || cart.items.length === 0) {
+      const validItems = cart ? cart.items.filter((i) => i.product) : [];
+      if (!cart || validItems.length === 0) {
         return res.json({ received: true });
       }
 
-      const orderItems = cart.items.map((item) => ({
+      const orderItems = validItems.map((item) => ({
         product: item.product._id,
         name: item.product.name,
         price: item.product.salePrice || item.product.price,
@@ -146,7 +149,7 @@ export async function handleWebhook(req, res) {
         image: item.product.images?.[0] || "",
       }));
 
-      const subtotal = cart.items.reduce((sum, i) => sum + (i.product.salePrice || i.product.price) * i.quantity, 0);
+      const subtotal = validItems.reduce((sum, i) => sum + (i.product.salePrice || i.product.price) * i.quantity, 0);
 
       const paidPaise = Number(payment.amount) || 0;
       const expectedPaise = Math.round(subtotal * 100);
@@ -172,7 +175,7 @@ export async function handleWebhook(req, res) {
         return res.json({ received: true });
       }
 
-      for (const item of cart.items) {
+      for (const item of validItems) {
         if (item.product.stock < item.quantity) {
           console.error(`Webhook: insufficient stock for ${item.product.name}`);
           return res.json({ received: true });
@@ -196,11 +199,14 @@ export async function handleWebhook(req, res) {
         throw err;
       }
 
-      for (const item of cart.items) {
-        await Product.findOneAndUpdate(
+      for (const item of validItems) {
+        const updated = await Product.findOneAndUpdate(
           { _id: item.product._id, stock: { $gte: item.quantity } },
           { $inc: { stock: -item.quantity } }
         );
+        if (!updated) {
+          console.error(`Webhook: stock changed before decrement for ${item.product.name}`);
+        }
       }
 
       await Cart.findOneAndUpdate({ user: notes.userId }, { $set: { items: [] } });
@@ -285,6 +291,28 @@ export async function placeOrder(req, res) {
       return res.status(400).json({ error: `Paid amount (₹${(paidPaise / 100).toFixed(2)}) does not match order total (₹${(expectedPaise / 100).toFixed(2)})` });
     }
 
+    // Idempotency: if this payment was already turned into an order, return it.
+    const alreadyPlaced = await Order.findOne({ "paymentResult.id": razorpay_payment_id });
+    if (alreadyPlaced) {
+      return res.status(200).json({ message: "Order already placed", order: alreadyPlaced });
+    }
+
+    // Atomically reserve stock so two concurrent checkouts can't oversell.
+    const reserved = [];
+    for (const item of validatedItems) {
+      const updated = await Product.findOneAndUpdate(
+        { _id: item.product, stock: { $gte: item.quantity } },
+        { $inc: { stock: -item.quantity } }
+      );
+      if (!updated) {
+        for (const r of reserved) {
+          await Product.findOneAndUpdate({ _id: r.product }, { $inc: { stock: r.quantity } });
+        }
+        return res.status(400).json({ error: `Insufficient stock: ${item.name}` });
+      }
+      reserved.push(item);
+    }
+
     let order;
     try {
       order = await Order.create({
@@ -296,6 +324,10 @@ export async function placeOrder(req, res) {
         paymentResult: { id: razorpay_payment_id, status: "captured" },
       });
     } catch (err) {
+      // Roll back reserved stock if the order could not be created.
+      for (const r of reserved) {
+        await Product.findOneAndUpdate({ _id: r.product }, { $inc: { stock: r.quantity } });
+      }
       if (err.code === 11000 && err.message?.includes("paymentResult.id")) {
         const existing = await Order.findOne({ "paymentResult.id": razorpay_payment_id });
         if (existing) {
@@ -303,13 +335,6 @@ export async function placeOrder(req, res) {
         }
       }
       throw err;
-    }
-
-    for (const item of validatedItems) {
-      await Product.findOneAndUpdate(
-        { _id: item.product, stock: { $gte: item.quantity } },
-        { $inc: { stock: -item.quantity } }
-      );
     }
 
     await Cart.findOneAndUpdate({ user: user._id }, { $set: { items: [] } });

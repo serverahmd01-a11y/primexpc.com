@@ -104,6 +104,22 @@ export async function createOrder(req, res) {
         logger.order("WARN", "COD order rejected - payment ID missing", { userId: user._id?.toString() });
         return res.status(400).json({ error: "Payment verification data missing for COD" });
       }
+
+      const expectedAdvancePaise = Math.round(serverTotal * 0.25 * 100);
+      const verification = await verifyCodAdvance(
+        paymentResult,
+        razorpay_order_id,
+        razorpay_signature,
+        expectedAdvancePaise
+      );
+      if (!verification.ok) {
+        logger.order("WARN", "COD order rejected - advance verification failed", {
+          userId: user._id?.toString(),
+          error: verification.error,
+          paymentId: paymentResult.id,
+        });
+        return res.status(400).json({ error: verification.error || "COD advance payment verification failed" });
+      }
     } else {
       return res.status(400).json({ error: "Invalid payment method. Use /api/payment/place-order for prepaid orders." });
     }
@@ -111,18 +127,44 @@ export async function createOrder(req, res) {
     const orderNumber = await generateOrderNumber(Order);
     logger.order("INFO", "Order number generated", { orderNumber });
 
-    const order = await Order.create({
-      user: user._id,
-      orderNumber,
-      orderItems: validatedItems,
-      shippingAddress,
-      paymentResult,
-      totalPrice: serverTotal,
-      codAdvanceAmount: Math.round(serverTotal * 0.25),
-      advancePaid: true,
-      balancePaid: false,
-      balancePaidAt: null,
-    });
+    // Atomically reserve stock before creating the order (prevents oversell).
+    const reserved = [];
+    for (const item of validatedItems) {
+      const updated = await Product.findOneAndUpdate(
+        { _id: item.product, stock: { $gte: item.quantity } },
+        { $inc: { stock: -item.quantity } }
+      );
+      if (!updated) {
+        for (const r of reserved) {
+          await Product.findOneAndUpdate({ _id: r.product }, { $inc: { stock: r.quantity } });
+        }
+        logger.order("WARN", "COD order rejected - stock changed", { product: item.product.toString() });
+        return res.status(400).json({ error: `Insufficient stock: ${item.name}` });
+      }
+      reserved.push(item);
+    }
+
+    let order;
+    try {
+      order = await Order.create({
+        user: user._id,
+        orderNumber,
+        orderItems: validatedItems,
+        shippingAddress,
+        paymentResult,
+        totalPrice: serverTotal,
+        codAdvanceAmount: Math.round(serverTotal * 0.25),
+        advancePaid: true,
+        balancePaid: false,
+        balancePaidAt: null,
+      });
+    } catch (err) {
+      // Roll back reserved stock if the order could not be created.
+      for (const r of reserved) {
+        await Product.findOneAndUpdate({ _id: r.product }, { $inc: { stock: r.quantity } });
+      }
+      throw err;
+    }
 
     logger.order("SUCCESS", "Order created", {
       orderId: order._id?.toString(),
@@ -134,13 +176,6 @@ export async function createOrder(req, res) {
       codAdvance: order.codAdvanceAmount,
       items: validatedItems.map((i) => ({ product: i.product.toString(), qty: i.quantity })),
     });
-
-    for (const item of validatedItems) {
-      await Product.findOneAndUpdate(
-        { _id: item.product, stock: { $gte: item.quantity } },
-        { $inc: { stock: -item.quantity } }
-      );
-    }
 
     await Cart.findOneAndUpdate({ user: user._id }, { $set: { items: [] } });
     logger.order("INFO", "Cart cleared and stock updated", { userId: user._id?.toString() });

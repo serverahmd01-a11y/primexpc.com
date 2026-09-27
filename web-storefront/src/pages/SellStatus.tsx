@@ -72,25 +72,33 @@ export default function SellStatus() {
     if (!mobile || mobile.length < 10) return;
     setLoading(true);
     try {
-      const r = await api.get(`/sell/leads?mobile=${mobile}`);
-      console.log('/sell/leads?mobile response:', r.data);
+      const r = await api.get(`/sell/public/leads?mobile=${encodeURIComponent(mobile)}`);
       const data = Array.isArray(r.data) ? r.data : (r.data?.data || r.data?.leads || []);
       if (Array.isArray(data)) setLeads(data);
       setSearched(true);
     } catch (e: any) {
-      console.error('/sell/leads?mobile ERROR:', e?.response?.status, e?.response?.data || e?.message);
+      console.error('/sell/public/leads?mobile ERROR:', e?.response?.status, e?.response?.data || e?.message);
+      setLeads([]);
+      setSearched(true);
+      setActionError(e?.response?.data?.message || 'Could not find requests for this mobile number.');
     } finally { setLoading(false); }
   };
-  const acceptOffer = async (id: string) => {
+  const respond = async (id: string, action: 'accept' | 'reject') => {
     setActionError('');
-    try { await api.post(`/sell/leads/${id}/respond`, { action: 'accept', mobile: mobile || '' }); user ? fetchMyLeads() : fetchByMobile(); }
-    catch (e: any) { setActionError(e?.response?.data?.message || 'Failed to accept offer. Try again.'); }
+    try {
+      if (user) {
+        await api.post(`/sell/leads/${id}/respond`, { action, mobile: mobile || '' });
+        fetchMyLeads();
+      } else {
+        await api.post(`/sell/public/leads/${id}/respond`, { action, mobile: mobile || '' });
+        fetchByMobile();
+      }
+    } catch (e: any) {
+      setActionError(e?.response?.data?.message || `Failed to ${action} offer. Try again.`);
+    }
   };
-  const rejectOffer = async (id: string) => {
-    setActionError('');
-    try { await api.post(`/sell/leads/${id}/respond`, { action: 'reject', mobile: mobile || '' }); user ? fetchMyLeads() : fetchByMobile(); }
-    catch (e: any) { setActionError(e?.response?.data?.message || 'Failed to reject offer. Try again.'); }
-  };
+  const acceptOffer = (id: string) => respond(id, 'accept');
+  const rejectOffer = (id: string) => respond(id, 'reject');
   const totalExpected = (l: Lead) => (l.products || []).reduce((s, p) => s + (p.expectedPrice || 0), 0);
 
   if (loading) return <div className="flex min-h-screen items-center justify-center text-[13px] text-muted-foreground">Loading...</div>;

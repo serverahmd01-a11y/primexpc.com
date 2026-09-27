@@ -5,8 +5,12 @@ import { User } from "../models/user.model.js";
 import { ENV } from "../config/env.js";
 import { sendEmail } from "../config/email.js";
 
-function generateToken(userId, role) {
-  return jwt.sign({ userId, role }, ENV.JWT_SECRET, { expiresIn: "7d" });
+function generateToken(userId, role, sessionStart) {
+  return jwt.sign(
+    { userId, role, sessionStart: sessionStart || Date.now() },
+    ENV.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
 }
 
 function sanitize(str) {
@@ -124,7 +128,7 @@ export async function getMe(req, res) {
 
 export async function refresh(req, res) {
   try {
-    const token = generateToken(req.user._id, req.user.role);
+    const token = generateToken(req.user._id, req.user.role, req.sessionStart);
     res.status(200).json({
       user: req.user.toSafeObject(),
       token,

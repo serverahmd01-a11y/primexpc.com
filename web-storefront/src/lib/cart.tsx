@@ -109,14 +109,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const syncCart = useCallback((): Promise<number | void> => {
     if (!isLoggedIn()) return Promise.resolve();
-    return api.get('/cart').then(({ data }) => {
+    return api.get('/cart').then(async ({ data }) => {
       const serverItems = data?.cart?.items || [];
       if (serverItems.length === 0) {
         const local = itemsRef.current || [];
-        for (const i of local) {
-          api.post('/cart', { productId: i.productId || i.slug, quantity: i.qty }).catch(() => {});
-        }
-        return;
+        // Push local items to the server and WAIT for them to finish, otherwise
+        // checkout can run against an empty server cart.
+        await Promise.all(
+          local.map((i) =>
+            api.post('/cart', { productId: i.productId || i.slug, quantity: i.qty }).catch(() => {})
+          )
+        );
+        return local.reduce((s: number, i: CartItem) => s + i.qty * (i.price || 0), 0);
       }
       const mapped = serverItems.map(toCartItem);
       const serverKeys = new Set(mapped.map((m: CartItem) => String(m.productId || m.slug || '')));

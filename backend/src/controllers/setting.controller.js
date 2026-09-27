@@ -58,16 +58,24 @@ export async function updateSettings(req, res) {
         await Setting.findOneAndUpdate({ key }, { value: val }, { upsert: true });
       }
     };
+    // Secrets must never be overwritten with an empty string or the mask
+    // placeholder (the UI pre-fills masked values, and clearing the field
+    // would otherwise wipe the stored secret).
+    const setSecret = async (key, val) => {
+      if (val !== undefined && val !== "" && val !== "••••••••") {
+        await Setting.findOneAndUpdate({ key }, { value: val }, { upsert: true });
+      }
+    };
 
     await set("razorpay_key_id", razorpay_key_id, "");
-    await set("razorpay_key_secret", razorpay_key_secret);
-    await set("razorpay_webhook_secret", razorpay_webhook_secret);
+    await setSecret("razorpay_key_secret", razorpay_key_secret);
+    await setSecret("razorpay_webhook_secret", razorpay_webhook_secret);
     await set("shiprocket_email", shiprocket_email, "");
-    await set("shiprocket_password", shiprocket_password);
+    await setSecret("shiprocket_password", shiprocket_password);
     await set("smtp_host", smtp_host, "");
     await set("smtp_port", smtp_port, "");
     await set("smtp_user", smtp_user, "");
-    await set("smtp_pass", smtp_pass);
+    await setSecret("smtp_pass", smtp_pass);
     await set("email_from_name", email_from_name, "");
     await set("email_from_address", email_from_address, "");
     if (gst_rates !== undefined) {

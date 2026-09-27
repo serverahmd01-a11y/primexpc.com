@@ -32,6 +32,7 @@ export default function CategoryPage() {
   const [visibleCount, setVisibleCount] = useState(16);
   const [loading, setLoading] = useState(true);
   const urlCond = searchParams.get('condition');
+  const urlSub = searchParams.get('sub');
   const condition = urlCond || localStorage.getItem('primex_condition') || 'refurbished';
 
   useEffect(() => {
@@ -47,7 +48,7 @@ export default function CategoryPage() {
       api.get('/categories', { params: { condition } }).then(({ data }) => setAllCats(Array.isArray(data) ? data : [])).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [condition]);
-  useEffect(() => { setVisibleCount(16); }, [search, condition, selectedCatIds, sort, priceRange, categoryName]);
+  useEffect(() => { setVisibleCount(16); }, [search, condition, selectedCatIds, sort, priceRange, categoryName, urlSub]);
 
   const mainCats = allCats.filter((c) => !c.parent);
   const currentMain = categoryName && categoryName !== 'all' ? categoryName : null;
@@ -63,6 +64,7 @@ export default function CategoryPage() {
   const filtered = useMemo(() => {
     let result = [...products];
     if (categoryName && categoryName !== 'all') result = result.filter((p) => p.category === categoryName);
+    if (urlSub) result = result.filter((p) => p.subCategory === urlSub);
     if (selectedCatIds.size > 0) {
       result = result.filter((p) => selectedCatNames.has(p.category) || selectedCatNames.has(p.subCategory || ''));
     }
@@ -75,7 +77,7 @@ export default function CategoryPage() {
     else if (sort === 'name') result.sort((a, b) => a.name.localeCompare(b.name));
     else if (sort === 'rating') result.sort((a, b) => (b.averageRating || 0) - (a.averageRating || 0));
     return result;
-  }, [products, categoryName, search, sort, priceRange, selectedCatIds, condition]);
+  }, [products, categoryName, search, sort, priceRange, selectedCatIds, condition, urlSub]);
 
   const paginated = filtered.slice(0, visibleCount);
 

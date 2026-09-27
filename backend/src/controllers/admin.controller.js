@@ -7,11 +7,12 @@ import { Order } from "../models/order.model.js";
 import { User } from "../models/user.model.js";
 import { sendOrderDelivered } from "../config/email.js";
 import { generateOrderNumber } from "../utils/order.util.js";
+import { ENV } from "../config/env.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const uploadsDir = path.join(process.cwd(), "uploads");
+const uploadsDir = ENV.UPLOADS_DIR;
 
 function getImageUrl(filename) {
   return `/uploads/${filename}`;
@@ -204,6 +205,9 @@ export async function updateOrderStatus(req, res) {
       return res.status(404).json({ error: "Order not found" });
     }
 
+    const wasStockHeld = !["cancelled", "returned"].includes(order.status);
+    const willReleaseStock = ["cancelled", "returned"].includes(status);
+
     order.status = status;
 
     if (status === "shipped" && !order.shippedAt) {
@@ -215,6 +219,15 @@ export async function updateOrderStatus(req, res) {
     }
 
     await order.save();
+
+    // Restore stock once when an order is cancelled or returned
+    if (wasStockHeld && willReleaseStock) {
+      for (const item of order.orderItems || []) {
+        if (item.product) {
+          await Product.findOneAndUpdate({ _id: item.product }, { $inc: { stock: item.quantity } });
+        }
+      }
+    }
 
     if (status === "delivered") {
       const populated = await Order.findById(orderId).populate("user");
