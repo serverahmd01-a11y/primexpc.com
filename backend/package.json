@@ -14,7 +14,8 @@
     "verify:restore": "node scripts/verify-restore.js",
     "stats:db": "node scripts/db-stats.js",
     "build:web": "npm --prefix ../web-storefront install --include=dev && npm --prefix ../web-storefront run build && node scripts/copy-dist.js",
-    "restore:db": "node scripts/restore-db.js"
+    "restore:db": "node scripts/restore-db.js",
+    "sync:missing": "node scripts/sync-missing.js"
   },
   "keywords": [],
   "author": "",
