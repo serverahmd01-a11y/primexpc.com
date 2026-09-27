@@ -33,6 +33,7 @@ backend/db-stats-report.txt
 # ================= LOCAL SCRIPTS WITH SECRETS =================
 # Contains hardcoded credentials - keep local only.
 backend/seed-admin.js
+backend/sync-to-online.js
 
 # ================= USER UPLOADS =================
 # Images/videos live in a persistent folder on the server (UPLOADS_DIR).
