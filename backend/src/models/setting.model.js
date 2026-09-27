@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import { ENV } from "../config/env.js";
 
 const settingSchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true },
@@ -18,8 +17,8 @@ export async function setSetting(key, value) {
 }
 
 export async function getRazorpayKeys() {
-  const key_id = (await getSetting("razorpay_key_id")) || ENV.RAZORPAY_KEY_ID || "";
-  const key_secret = (await getSetting("razorpay_key_secret")) || ENV.RAZORPAY_KEY_SECRET || "";
-  const webhook_secret = (await getSetting("razorpay_webhook_secret")) || ENV.RAZORPAY_WEBHOOK_SECRET || "";
+  const key_id = await getSetting("razorpay_key_id");
+  const key_secret = await getSetting("razorpay_key_secret");
+  const webhook_secret = await getSetting("razorpay_webhook_secret");
   return { key_id, key_secret, webhook_secret };
 }

@@ -565,54 +565,6 @@ export async function customerRespond(req, res) {
   }
 }
 
-// Public (guest) lead lookup by mobile number - used by the "track your request" page.
-export async function getLeadsByMobilePublic(req, res) {
-  try {
-    const { mobile } = req.query;
-    if (!mobile) {
-      return res.status(400).json({ message: "Mobile number required" });
-    }
-    const leads = await SellLead.find({ customerMobile: String(mobile).trim() }).sort({ createdAt: -1 });
-    res.status(200).json(leads);
-  } catch (error) {
-    res.status(500).json({ message: "Failed to fetch leads" });
-  }
-}
-
-// Public (guest) accept/reject - allowed only when the supplied mobile matches the lead.
-export async function customerRespondPublic(req, res) {
-  try {
-    const { action, mobile } = req.body;
-    const lead = await SellLead.findById(req.params.id);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
-
-    if (!mobile || String(lead.customerMobile) !== String(mobile).trim()) {
-      return res.status(403).json({ message: "Mobile number does not match this request" });
-    }
-
-    if (action === "accept") {
-      if (lead.status !== "price_offered") {
-        return res.status(400).json({ message: "No price offered to accept" });
-      }
-      lead.status = "accepted";
-    } else if (action === "reject") {
-      if (lead.status !== "price_offered") {
-        return res.status(400).json({ message: "No price offered to reject" });
-      }
-      lead.status = "rejected";
-    } else {
-      return res.status(400).json({ message: "Invalid action" });
-    }
-
-    lead.adminNotes.push({ text: `Customer ${action}ed the offer` });
-    await lead.save();
-
-    res.status(200).json({ message: `Offer ${action}ed`, lead });
-  } catch (error) {
-    res.status(500).json({ message: "Failed to respond" });
-  }
-}
-
 export async function getSellProducts(req, res) {
   try {
     const products = await SellProduct.find({ active: true }).sort({ sortOrder: 1 });

@@ -4,7 +4,6 @@ import { upload } from "../middleware/multer.middleware.js";
 import {
   sendOTP, verifyOTP, uploadSellFile, submitLead,
   getMyLeads, getMyLeadsByUser, getLeadById, customerRespond,
-  getLeadsByMobilePublic, customerRespondPublic,
 } from "../controllers/sell.controller.js";
 
 const router = Router();
@@ -29,9 +28,5 @@ router.get("/leads/me", protectRoute, getMyLeadsByUser);
 router.get("/leads", protectRoute, getMyLeads);
 router.get("/leads/:id", protectRoute, getLeadById);
 router.post("/leads/:id/respond", protectRoute, customerRespond);
-
-// Public guest tracking (verified by mobile number)
-router.get("/public/leads", getLeadsByMobilePublic);
-router.post("/public/leads/:id/respond", customerRespondPublic);
 
 export default router;

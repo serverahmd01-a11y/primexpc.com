@@ -86,15 +86,13 @@ export const refreshAuth = async (req, res, next) => {
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.split(" ")[1];
       const decoded = jwt.verify(token, ENV.JWT_SECRET, { ...JWT_OPTIONS, ignoreExpiration: true });
-      const sessionStart = Number(decoded.sessionStart) || (decoded.iat ? decoded.iat * 1000 : Date.now());
-      const MAX_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
-      if (Date.now() - sessionStart > MAX_SESSION_MS) {
-        return res.status(401).json({ message: "Unauthorized - session expired, please login again" });
+      const expMs = (decoded.exp || 0) * 1000;
+      if (!decoded.exp || Date.now() - expMs > 30 * 24 * 60 * 60 * 1000) {
+        return res.status(401).json({ message: "Unauthorized - session too old, please login again" });
       }
       const user = await User.findById(decoded.userId);
       if (user) {
         req.user = user;
-        req.sessionStart = sessionStart;
       }
     }
     if (!req.user) {

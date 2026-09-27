@@ -118,19 +118,6 @@ export async function generateLabel(shipmentIds) {
 }
 
 export async function createPickupOrder(sellLead) {
-  const leadItems = Array.isArray(sellLead.products) && sellLead.products.length > 0
-    ? sellLead.products
-    : [{ brand: "Item", model: "", category: "Other", expectedPrice: 0 }];
-
-  const orderItems = leadItems.map((p, idx) => ({
-    name: `${p.brand || ""} ${p.model || ""} (${p.category || ""})`.replace(/\s+/g, " ").trim() || `Item ${idx + 1}`,
-    sku: `SELL-${sellLead._id.toString().slice(-8).toUpperCase()}-${idx + 1}`,
-    units: 1,
-    selling_price: sellLead.declaredValue || sellLead.offeredPrice || p.expectedPrice || 1000,
-  }));
-
-  const subTotal = orderItems.reduce((sum, i) => sum + (Number(i.selling_price) || 0), 0) || 1000;
-
   const body = {
     order_id: `SELL-${sellLead._id.toString().slice(-6).toUpperCase()}`,
     order_date: new Date().toISOString().split("T")[0],
@@ -147,9 +134,16 @@ export async function createPickupOrder(sellLead) {
     billing_email: sellLead.customerEmail,
     billing_phone: sellLead.customerMobile,
     shipping_is_billing: true,
-    order_items: orderItems,
+    order_items: [
+      {
+        name: `${sellLead.brand} ${sellLead.model} (${sellLead.category})`,
+        sku: `SELL-${sellLead._id.toString().slice(-8).toUpperCase()}`,
+        units: 1,
+        selling_price: sellLead.declaredValue || sellLead.offeredPrice || sellLead.expectedPrice || 1000,
+      },
+    ],
     payment_method: "Prepaid",
-    sub_total: subTotal,
+    sub_total: sellLead.declaredValue || sellLead.offeredPrice || sellLead.expectedPrice || 1000,
     length: sellLead.packageLength || 30,
     breadth: sellLead.packageBreadth || 30,
     height: sellLead.packageHeight || 30,

@@ -168,7 +168,7 @@ export default function Home() {
                       <div className="flex items-baseline gap-2 flex-wrap">
                         <span className="font-display text-lg font-black text-primary">{formatINR(p.salePrice)}</span>
                         <span className="font-display text-lg font-black text-destructive line-through">{formatINR(p.price)}</span>
-                        <span className="text-[10px] font-bold text-primary">-{p.price > 0 ? Math.max(0, Math.round((1 - p.salePrice / p.price) * 100)) : 0}%</span>
+                        <span className="text-[10px] font-bold text-primary">-{Math.round((1 - p.salePrice / p.price) * 100)}%</span>
                       </div>
                     ) : (
                       <span className="font-display text-lg font-black text-primary">{formatINR(p.price)}</span>
