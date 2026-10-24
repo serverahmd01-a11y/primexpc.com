@@ -33,7 +33,7 @@ function downloadCsv(filename: string, headers: string[], rows: Row[]) {
   URL.revokeObjectURL(url);
 }
 
-function downloadPdf(filename: string, title: string, subtitle: string, headers: string[], rows: Row[], colWidths: number[]) {
+function downloadPdf(filename: string, title: string, subtitle: string, headers: string[], rows: Row[], colWidths: number[], rightAlign: boolean[] = []) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -41,16 +41,28 @@ function downloadPdf(filename: string, title: string, subtitle: string, headers:
   const x0 = 8;
   let y = 14;
 
+  // Keep every cell on ONE line: truncate with "..." if it can't fit the column.
+  const fit = (t: string, w: number) => {
+    let s = pdfSafe(t);
+    while (doc.getTextWidth(s) > w - 3 && s.length > 4) s = s.slice(0, -4) + '...';
+    return s;
+  };
+  const drawCell = (t: string, i: number, rowY: number) => {
+    const s = fit(String(t), widths[i]);
+    const x = rightAlign[i] ? x0 + widths.slice(0, i).reduce((s2, w) => s2 + w, 0) + widths[i] - doc.getTextWidth(s) - 1.5
+      : x0 + widths.slice(0, i).reduce((s2, w) => s2 + w, 0) + 1.5;
+    doc.text(s, x, rowY + 4);
+  };
+
   const drawHead = () => {
-    doc.setFontSize(15); doc.setFont('helvetica', 'bold'); doc.text(title, x0, y);
+    doc.setFontSize(15); doc.setFont('helvetica', 'bold'); doc.text(pdfSafe(title), x0, y);
     doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(110);
-    doc.text(subtitle, x0, y + 5);
+    doc.text(fit(pdfSafe(subtitle), pageW - 16), x0, y + 5);
     doc.setTextColor(0);
     y += 11;
     doc.setFontSize(8); doc.setFont('helvetica', 'bold');
     doc.setFillColor(16, 185, 129); doc.setTextColor(255);
-    let x = x0;
-    headers.forEach((h, i) => { doc.rect(x, y, widths[i], 6, 'F'); doc.text(String(h), x + 1.5, y + 4, { maxWidth: widths[i] - 3 }); x += widths[i]; });
+    headers.forEach((h, i) => { doc.rect(x0 + widths.slice(0, i).reduce((s, w) => s + w, 0), y, widths[i], 6, 'F'); drawCell(h, i, y); });
     doc.setTextColor(0); doc.setFont('helvetica', 'normal');
     y += 6;
   };
@@ -58,18 +70,26 @@ function downloadPdf(filename: string, title: string, subtitle: string, headers:
   drawHead();
   rows.forEach((row) => {
     if (y > pageH - 10) { doc.addPage(); y = 14; drawHead(); }
-    let x = x0;
-    row.forEach((cell, i) => { doc.text(String(cell ?? ''), x + 1.5, y + 4, { maxWidth: widths[i] - 3 }); x += widths[i]; });
+    row.forEach((cell, i) => drawCell(String(cell), i, y));
     doc.setDrawColor(230); doc.line(x0, y + 5.5, x0 + widths.reduce((s, w) => s + w, 0), y + 5.5);
     y += 6;
   });
 
   doc.setFontSize(8); doc.setTextColor(130);
-  doc.text(`Generated ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST · PrimeX PC`, x0, pageH - 5);
+  doc.text(pdfSafe(`Generated ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST | PrimeX PC`), x0, pageH - 5);
   doc.save(`${filename}.pdf`);
 }
 
 const MONEY_COLS = ['Total', 'Revenue', 'Spend', 'Advance', 'Balance', 'Expected', 'Offered', 'Price', 'Sale Price', 'Stock Value', 'Due'];
+const isMoneyCol = (h: string) => MONEY_COLS.some((m) => h.includes(m)) || h.includes('received') || h.includes('settled') || h.toLowerCase().includes('money');
+
+// jsPDF's built-in fonts cannot render ₹ / em-dash / · — swap them for ASCII.
+const pdfSafe = (v: string | number) =>
+  String(v ?? '')
+    .replace(/₹\s?/g, 'Rs. ')
+    .replace(/[—–]/g, '-')
+    .replace(/·/g, '|')
+    .replace(/[^\x20-\x7E]/g, '');
 
 // ---------- page ----------
 
@@ -464,8 +484,14 @@ export default function AdminReports() {
     if (rows.length === 0) { alert('Nothing to download with these filters.'); return; }
     const fileBase = `${report}-report-${todayIST()}`;
     const subtitle = stats.map((s) => `${s.label}: ${s.value}`).join('  ·  ');
-    if (kind === 'excel') downloadCsv(fileBase, cols.map((c) => c.h), rows);
-    else downloadPdf(fileBase, title, subtitle, cols.map((c) => c.h), rows, cols.map((c) => c.w));
+    if (kind === 'excel') {
+      downloadCsv(fileBase, cols.map((c) => c.h), rows); // CSV keeps raw numbers for Excel math
+    } else {
+      // PDF: money numbers formatted (Rs. 31,499) and right-aligned
+      const pdfRows = rows.map((r) => r.map((cell, j) =>
+        typeof cell === 'number' && isMoneyCol(cols[j]?.h || '') ? `Rs. ${cell.toLocaleString('en-IN')}` : cell));
+      downloadPdf(fileBase, title, subtitle, cols.map((c) => c.h), pdfRows, cols.map((c) => c.w), cols.map((c) => isMoneyCol(c.h)));
+    }
   };
 
   const paged = paginate(rows as unknown as Record<string, unknown>[], page, perPage) as unknown as Row[];
