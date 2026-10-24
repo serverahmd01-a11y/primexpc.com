@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { getImageUrl } from '@/lib/utils';
-import { Save, Key, Truck, Mail, Percent, Store, Link2, Share2, ImageIcon, Trash2, Phone, Plus } from 'lucide-react';
+import { Save, Key, Truck, Mail, Percent, Store, Link2, Share2, ImageIcon, Trash2, Phone, Plus, Database, Bell } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const TABS = [
   { id: 'store', label: 'Store', icon: Store },
   { id: 'payment', label: 'Payment', icon: Key },
   { id: 'shipping', label: 'Shipping', icon: Truck },
   { id: 'email', label: 'Email', icon: Mail },
+  { id: 'notify', label: 'Notifications', icon: Bell },
+  { id: 'backup', label: 'Backup', icon: Database },
   { id: 'gst', label: 'GST', icon: Percent },
   { id: 'social', label: 'Social & Footer', icon: Share2 },
   { id: 'banners', label: 'Banners', icon: ImageIcon },
@@ -55,6 +58,8 @@ export default function AdminSettings() {
   const [msg, setMsg] = useState<string | null>(null);
   const [testingEmail, setTestingEmail] = useState(false);
   const [emailMsg, setEmailMsg] = useState<string | null>(null);
+  const [backingUp, setBackingUp] = useState<'mongo' | 'json' | null>(null);
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
 
   useEffect(() => {
     api.get('/admin/settings').then((r) => {
@@ -121,6 +126,28 @@ export default function AdminSettings() {
     try { await api.post('/admin/settings/test-email', {}); setEmailMsg('Test email sent!'); }
     catch { setEmailMsg('Failed to send test email'); }
     finally { setTestingEmail(false); }
+  };
+
+  const downloadBackup = async (kind: 'mongo' | 'json') => {
+    setBackingUp(kind);
+    setBackupMsg(null);
+    try {
+      const isMongo = kind === 'mongo';
+      const res = await api.get(`/admin/settings/${isMongo ? 'backup-mongo' : 'backup'}`, { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data], { type: isMongo ? 'application/zip' : 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      a.download = isMongo ? `primexpc-dump-${today}.zip` : `primexpc-backup-${today}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      const sizeKb = Math.round(res.data.size / 1024);
+      setBackupMsg(`Downloaded (${sizeKb} KB) — keep it somewhere safe!`);
+    } catch {
+      setBackupMsg('Backup failed — try again');
+    } finally {
+      setBackingUp(null);
+    }
   };
 
   if (loading) return <div className="py-12 text-center text-muted-foreground">Loading...</div>;
@@ -238,6 +265,62 @@ export default function AdminSettings() {
               </button>
               {emailMsg && <span className={`text-xs ${emailMsg.includes('Failed') ? 'text-destructive' : 'text-primary'}`}>{emailMsg}</span>}
             </div>
+          </Section>
+        )}
+
+        {tab === 'notify' && (
+          <Section icon={Bell} title="Order Notifications">
+            <p className="text-xs text-muted-foreground">Notification bots now live on their own page — create unlimited bots (Telegram / WhatsApp / Email), each with its own events like New Order, New Customer, Low Stock, and Payment Without Order.</p>
+            <Link to="/admin/bots" className="mt-3 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-bold uppercase tracking-wider text-primary-foreground shadow-[var(--shadow-glow)] hover:brightness-110">
+              Open Bots Page →
+            </Link>
+          </Section>
+        )}
+
+        {tab === 'backup' && (
+          <Section icon={Database} title="Database Backup">
+            <p className="text-xs text-muted-foreground">Downloads a full backup of your MongoDB database (products, orders, customers, settings — everything) to this PC. Take one every week and keep a copy on Google Drive.</p>
+
+            <div className="mt-4 rounded-lg border border-border p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold">MongoDB Dump (.zip) — recommended</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Standard mongodump format (.bson files). Restores with mongorestore or MongoDB Compass.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => downloadBackup('mongo')}
+                  disabled={!!backingUp}
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-bold uppercase tracking-wider text-primary-foreground shadow-[var(--shadow-glow)] hover:brightness-110 disabled:opacity-60"
+                >
+                  <Database className={`h-4 w-4 ${backingUp === 'mongo' ? 'animate-pulse' : ''}`} />
+                  {backingUp === 'mongo' ? 'Preparing dump...' : 'Download .zip Dump'}
+                </button>
+              </div>
+              <code className="mt-2 block rounded bg-background px-2 py-1.5 font-mono text-[11px] text-primary">unzip primexpc-dump.zip  →  mongorestore --uri "mongodb://localhost:27017" primexpc/</code>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-border p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold">JSON Backup — human readable</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Single .json file, opens in any editor. Restores with the project's own script (no tools needed).</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => downloadBackup('json')}
+                  disabled={!!backingUp}
+                  className="inline-flex items-center gap-2 rounded-full border border-border px-6 py-2.5 text-sm font-bold uppercase tracking-wider text-muted-foreground hover:border-primary hover:text-primary disabled:opacity-60"
+                >
+                  <Database className={`h-4 w-4 ${backingUp === 'json' ? 'animate-pulse' : ''}`} />
+                  {backingUp === 'json' ? 'Preparing...' : 'Download .json'}
+                </button>
+              </div>
+              <code className="mt-2 block rounded bg-background px-2 py-1.5 font-mono text-[11px] text-primary">node scripts/restore-db.js primexpc-backup-YYYY-MM-DD.json</code>
+            </div>
+
+            {backupMsg && <p className={`mt-3 text-xs font-semibold ${backupMsg.includes('failed') ? 'text-destructive' : 'text-primary'}`}>{backupMsg}</p>}
+            <p className="mt-3 text-[11px] text-muted-foreground">Every backup download is recorded in Admin → Logs. Backup files contain customer data — don't share them.</p>
           </Section>
         )}
 

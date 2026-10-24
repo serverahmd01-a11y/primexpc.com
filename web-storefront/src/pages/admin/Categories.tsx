@@ -104,7 +104,7 @@ export default function AdminCategories() {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-xl font-black">Categories</h2>
           <p className="text-sm text-muted-foreground mt-1">{mainCats.length} main · {categories.length - mainCats.length} sub · {products.filter((p) => p.condition === activeCond).length} {activeCond} products</p>
@@ -134,7 +134,7 @@ export default function AdminCategories() {
       {/* Form Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowForm(false)}>
-          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg p-6 mx-4 border border-border" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg p-6 mx-4 border border-border max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold">{editId ? 'Edit Category' : 'Add Category'}</h2>
               <button onClick={() => setShowForm(false)} className="rounded-full p-1 text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
@@ -188,7 +188,7 @@ export default function AdminCategories() {
 
       {/* Category Table */}
       <div className="overflow-x-auto rounded-xl border border-border">
-        <table className="w-full">
+        <table className="w-full min-w-[560px]">
           <thead>
             <tr className="border-b border-border bg-surface/50">
               <th className="px-0 py-3 pl-4 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Category</th>

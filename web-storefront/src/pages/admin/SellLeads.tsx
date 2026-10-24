@@ -135,7 +135,7 @@ export default function SellLeads() {
             <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">No leads match the filters</div>
           ) : (
           <div className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[860px] text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface/40 text-left text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   <th className="w-8 px-3 py-3"></th>

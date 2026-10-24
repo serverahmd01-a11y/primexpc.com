@@ -96,7 +96,7 @@ export default function AdminCustomers() {
 
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowCreate(false)}>
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 mx-4" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-lg font-black">Create User</h2>
               <button onClick={() => setShowCreate(false)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
@@ -118,7 +118,7 @@ export default function AdminCustomers() {
         <div className="py-12 text-center text-sm text-muted-foreground">No customers match the search</div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface/40 text-left text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 <th className="px-5 py-3">Customer</th>

@@ -214,7 +214,7 @@ export default function AdminMissedOrders() {
                 const isOut = stock <= 0;
                 return (
                   <div key={idx}>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <div className="flex-1">
                         <SearchableSelect options={productOptions} value={it.productId}
                           onChange={(v) => updateItem(idx, { productId: v })}
@@ -348,7 +348,7 @@ export default function AdminMissedOrders() {
           <div className="py-12 text-center text-sm text-muted-foreground">No missed orders added yet</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[960px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   <th className="px-5 py-3">Order No.</th>

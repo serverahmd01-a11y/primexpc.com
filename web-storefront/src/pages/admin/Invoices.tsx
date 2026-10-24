@@ -94,7 +94,7 @@ export default function AdminInvoices() {
         <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">No invoices match the selected filters.</div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[820px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface/40 text-left text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 <th className="px-5 py-3">Invoice No.</th>

@@ -152,8 +152,7 @@ export const orderApi = {
 };
 
 export const paymentApi = {
-  createOrder: (data: { amount: number; receipt: string }) =>
-    api.post('/payment/create-order', data).then((r) => r.data),
+  createOrder: (data: unknown) => api.post('/payment/create-order', data).then((r) => r.data),
   verify: (data: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) =>
     api.post('/payment/verify', data).then((r) => r.data),
   placeOrder: (data: unknown) => api.post('/payment/place-order', data).then((r) => r.data),
@@ -169,9 +168,15 @@ export const userApi = {
   removeFromWishlist: (productId: string) => api.delete(`/users/wishlist/${productId}`).then((r) => r.data),
 };
 
+export const notifyApi = {
+  list: () => api.get('/admin/notify-channels').then((r) => r.data),
+  create: (data: unknown) => api.post('/admin/notify-channels', data).then((r) => r.data),
+  update: (id: string, data: unknown) => api.put(`/admin/notify-channels/${id}`, data).then((r) => r.data),
+  remove: (id: string) => api.delete(`/admin/notify-channels/${id}`).then((r) => r.data),
+  test: (id: string) => api.post(`/admin/notify-channels/${id}/test`).then((r) => r.data),
+};
+
 export const sellApi = {
-  sendOTP: (mobile: string) => api.post('/sell/send-otp', { mobile }).then((r) => r.data),
-  verifyOTP: (mobile: string, otp: string) => api.post('/sell/verify-otp', { mobile, otp }).then((r) => r.data),
   uploadFiles: (formData: FormData) => api.post('/sell/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   submitLead: (data: unknown) => api.post('/sell/submit', data).then((r) => r.data),
   getMyLeads: (mobile?: string) => api.get('/sell/leads', mobile ? { params: { mobile } } : undefined).then((r) => r.data),

@@ -4,9 +4,15 @@ import crypto from "crypto";
 import { User } from "../models/user.model.js";
 import { ENV } from "../config/env.js";
 import { sendEmail } from "../config/email.js";
+import { dispatchNotification } from "../config/notify.js";
+import { logger } from "../utils/logger.js";
 
 function generateToken(userId, role) {
   return jwt.sign({ userId, role }, ENV.JWT_SECRET, { expiresIn: "7d" });
+}
+
+function reqIp(req) {
+  return req.ip || req.headers["x-forwarded-for"] || "";
 }
 
 function sanitize(str) {
@@ -40,6 +46,7 @@ export async function register(req, res) {
 
     const existing = await User.findOne({ email: safeEmail });
     if (existing) {
+      logger.auth("WARN", "Register failed - email already registered", { email: safeEmail, ip: reqIp(req) });
       return res.status(400).json({ message: "Email already registered" });
     }
 
@@ -65,6 +72,12 @@ export async function register(req, res) {
     }
 
     const token = generateToken(user._id, user.role);
+
+    logger.auth("SUCCESS", "New user registered", { userId: user._id.toString(), email: safeEmail, role, ip: reqIp(req) });
+    dispatchNotification("new_user", {
+      title: "👤 New Customer Registered",
+      lines: [`Name: ${safeName}`, `Email: ${safeEmail}`, `Time: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST`],
+    });
 
     res.status(201).json({
       user: user.toSafeObject(),
@@ -94,15 +107,19 @@ export async function login(req, res) {
 
     const user = await User.findOne({ email: safeEmail });
     if (!user) {
+      logger.auth("WARN", "Login failed - unknown email", { email: safeEmail, ip: reqIp(req) });
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      logger.auth("WARN", "Login failed - wrong password", { email: safeEmail, userId: user._id.toString(), ip: reqIp(req) });
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
     const token = generateToken(user._id, user.role);
+
+    logger.auth("SUCCESS", "User logged in", { userId: user._id.toString(), email: safeEmail, role: user.role, ip: reqIp(req) });
 
     res.status(200).json({
       user: user.toSafeObject(),
@@ -143,8 +160,11 @@ export async function forgotPassword(req, res) {
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) {
+      logger.auth("WARN", "Password reset requested for unknown email", { email, ip: reqIp(req) });
       return res.status(200).json({ message: "If that email exists, a reset link has been sent" });
     }
+
+    logger.auth("INFO", "Password reset link sent", { userId: user._id.toString(), email: user.email, ip: reqIp(req) });
 
     const plainToken = crypto.randomBytes(32).toString("hex");
     const hashedToken = await bcrypt.hash(plainToken, 10);
@@ -208,6 +228,8 @@ export async function resetPassword(req, res) {
     user.resetToken = null;
     user.resetTokenExpiry = null;
     await user.save();
+
+    logger.auth("SUCCESS", "Password reset completed", { userId: user._id.toString(), email: user.email, ip: reqIp(req) });
 
     res.status(200).json({ message: "Password reset successfully. You can now login." });
   } catch (error) {

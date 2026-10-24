@@ -35,6 +35,14 @@ export async function getSettings(req, res) {
       ])),
       social_links: await getSetting("social_links", "[]"),
       custom_footer_links: await getSetting("custom_footer_links", "[]"),
+      notify_telegram_enabled: await getSetting("notify_telegram_enabled", "false"),
+      notify_telegram_token: (await getSetting("notify_telegram_token", "")) ? "••••••••" : "",
+      notify_telegram_chat: await getSetting("notify_telegram_chat", ""),
+      notify_whatsapp_enabled: await getSetting("notify_whatsapp_enabled", "false"),
+      notify_whatsapp_phone: await getSetting("notify_whatsapp_phone", ""),
+      notify_whatsapp_apikey: (await getSetting("notify_whatsapp_apikey", "")) ? "••••••••" : "",
+      notify_email_enabled: await getSetting("notify_email_enabled", "false"),
+      notify_email_to: await getSetting("notify_email_to", ""),
     });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch settings" });
@@ -51,6 +59,9 @@ export async function updateSettings(req, res) {
       store_name, store_address, store_city, store_state, store_pincode, store_phone, store_phones, store_email,
       store_hours, store_whatsapp, store_gstin,
       social_links, custom_footer_links,
+      notify_telegram_enabled, notify_telegram_token, notify_telegram_chat,
+      notify_whatsapp_enabled, notify_whatsapp_phone, notify_whatsapp_apikey,
+      notify_email_enabled, notify_email_to,
     } = req.body;
 
     const set = async (key, val, masked = "••••••••") => {
@@ -93,6 +104,14 @@ export async function updateSettings(req, res) {
     if (custom_footer_links !== undefined) {
       await set("custom_footer_links", typeof custom_footer_links === "string" ? custom_footer_links : JSON.stringify(custom_footer_links), "");
     }
+    await set("notify_telegram_enabled", notify_telegram_enabled, "");
+    await set("notify_telegram_token", notify_telegram_token);
+    await set("notify_telegram_chat", notify_telegram_chat, "");
+    await set("notify_whatsapp_enabled", notify_whatsapp_enabled, "");
+    await set("notify_whatsapp_phone", notify_whatsapp_phone, "");
+    await set("notify_whatsapp_apikey", notify_whatsapp_apikey);
+    await set("notify_email_enabled", notify_email_enabled, "");
+    await set("notify_email_to", notify_email_to, "");
 
     res.status(200).json({ message: "Settings updated" });
   } catch (error) {

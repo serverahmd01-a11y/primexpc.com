@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Upload, X, Check, Camera, Video, Trash2, Clock, MapPin, Plus, Minus } from 'lucide-react';
 import api from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 
 const CONDITIONS = [
   { value: 'perfectly_working', label: 'Perfectly Working' },
@@ -146,6 +147,25 @@ export default function SellSubmit() {
   const [customerCity, setCustomerCity] = useState(saved?.customerCity ?? '');
   const [customerState, setCustomerState] = useState(saved?.customerState ?? '');
   const [customerPincode, setCustomerPincode] = useState(saved?.customerPincode ?? '');
+  const { user } = useAuth();
+
+  // Prefill from the logged-in account + saved default address so the lead
+  // reliably links to this account and shows up on the Sell Status page.
+  useEffect(() => {
+    if (!user) return;
+    setCustomerName((v: string) => v || user.name || '');
+    setCustomerEmail((v: string) => v || user.email || '');
+    api.get('/users/addresses').then((r) => {
+      const list = r.data?.addresses || [];
+      const addr = list.find((a: { isDefault?: boolean }) => a.isDefault) || list[0];
+      if (!addr) return;
+      setCustomerMobile((v: string) => v || addr.phoneNumber || '');
+      setCustomerAddress((v: string) => v || addr.streetAddress || '');
+      setCustomerCity((v: string) => v || addr.city || '');
+      setCustomerState((v: string) => v || addr.state || '');
+      setCustomerPincode((v: string) => v || addr.zipCode || '');
+    }).catch(() => {});
+  }, [user]);
   const [gstNumber, setGstNumber] = useState(saved?.gstNumber ?? '');
   const [pickupAddress, setPickupAddress] = useState(saved?.pickupAddress ?? '');
   const [preferredPickupDate, setPreferredPickupDate] = useState(saved?.preferredPickupDate ?? '');

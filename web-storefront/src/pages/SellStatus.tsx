@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { formatINR } from '@/lib/cart';
-import { safeTrackingUrl } from '@/lib/utils';
-import { Package, Truck, Search } from 'lucide-react';
+import { safeTrackingUrl, getImageUrl } from '@/lib/utils';
+import { Package, Truck, Search, X, Camera, Video } from 'lucide-react';
 import api from '@/lib/api';
 
 const STATUS_BADGE: Record<string, string> = {
@@ -31,7 +31,18 @@ const CONDITION_LABELS: Record<string, string> = {
 
 type Lead = {
   _id: string;
-  products?: { category: string; brand: string; model: string; condition: string; expectedPrice: number }[];
+  products?: {
+    category: string; brand: string; model: string; condition: string; expectedPrice: number;
+    accessories?: string[]; description?: string;
+    serialNumber?: string; purchaseDate?: string;
+    warrantyRemaining?: number | string; warrantyMonths?: number | string;
+    checklist?: Record<string, boolean | string>;
+  }[];
+  photos?: { url: string; type?: string }[];
+  videos?: { url: string }[];
+  customerName?: string; customerMobile?: string; customerEmail?: string;
+  customerAddress?: string; customerCity?: string; customerState?: string; customerPincode?: string;
+  gstNumber?: string; pickupAddress?: string; preferredPickupDate?: string; preferredTimeSlot?: string;
   status: string; offeredPrice: number;
   awbNumber: string; courierName: string; trackingUrl: string;
   createdAt: string;
@@ -46,6 +57,7 @@ export default function SellStatus() {
   const [searched, setSearched] = useState(false);
   const [apiError, setApiError] = useState('');
   const [actionError, setActionError] = useState('');
+  const [lightbox, setLightbox] = useState<{ url: string; kind: 'photo' | 'video' } | null>(null);
 
   useEffect(() => { if (user) { setApiError(''); fetchMyLeads(); } }, [user]);
 
@@ -166,6 +178,76 @@ export default function SellStatus() {
                       ))}
                     </div>
 
+                    {((lead.photos?.length || 0) + (lead.videos?.length || 0)) > 0 && (
+                      <div className="mt-3">
+                        <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Your uploads — tap to view</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(lead.photos || []).filter((p) => p.url).map((p, i) => (
+                            <button key={`p${i}`} type="button" onClick={() => setLightbox({ url: p.url, kind: 'photo' })} title={p.type || 'Photo'} className="group relative h-14 w-14 overflow-hidden rounded-md border border-border hover:border-primary transition">
+                              <img src={getImageUrl(p.url)} alt={p.type || 'photo'} className="h-full w-full object-cover" loading="lazy" />
+                              {p.type && <span className="absolute bottom-0 left-0 right-0 truncate bg-black/60 px-0.5 text-center text-[8px] font-bold uppercase text-white">{p.type}</span>}
+                            </button>
+                          ))}
+                          {(lead.videos || []).filter((v) => v.url).map((v, i) => (
+                            <button key={`v${i}`} type="button" onClick={() => setLightbox({ url: v.url, kind: 'video' })} title="Video" className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-md border border-border bg-surface hover:border-primary transition">
+                              <Video className="h-5 w-5 text-primary" />
+                              <span className="absolute bottom-0 left-0 right-0 bg-black/60 px-0.5 text-center text-[8px] font-bold uppercase text-white">Video</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <details className="mt-3 rounded-md border border-border bg-surface/30">
+                      <summary className="cursor-pointer select-none px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:text-primary">View full details</summary>
+                      <div className="space-y-3 border-t border-border px-3 py-2.5 text-[12px]">
+                        {products.map((item, i: number) => (
+                          <div key={`d${i}`} className="rounded-md border border-border/60 p-2">
+                            <div className="text-[12px] font-bold">{i + 1}. {item.brand} {item.model}</div>
+                            <div className="mt-0.5 text-[11px] text-muted-foreground">{item.category} · {CONDITION_LABELS[item.condition] || item.condition} · Expected {formatINR(item.expectedPrice || 0)}</div>
+                            {item.serialNumber && <div className="mt-1 text-[11px]"><span className="text-muted-foreground">Serial No:</span> <span className="font-mono">{item.serialNumber}</span></div>}
+                            {(item.purchaseDate || item.warrantyMonths || item.warrantyRemaining) && (
+                              <div className="mt-0.5 text-[11px]">
+                                <span className="text-muted-foreground">Purchased:</span> {item.purchaseDate ? new Date(item.purchaseDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '-'}
+                                {item.warrantyMonths ? <> · <span className="text-muted-foreground">Warranty:</span> {item.warrantyMonths} mo</> : null}
+                                {item.warrantyRemaining ? <> · <span className="text-muted-foreground">Left:</span> {item.warrantyRemaining}</> : null}
+                              </div>
+                            )}
+                            {item.accessories && item.accessories.length > 0 && (
+                              <div className="mt-1 text-[11px]"><span className="text-muted-foreground">Accessories:</span> {item.accessories.join(', ')}</div>
+                            )}
+                            {item.checklist && Object.keys(item.checklist).length > 0 && (
+                              <div className="mt-1 text-[11px]"><span className="text-muted-foreground">Checklist:</span> {Object.entries(item.checklist).map(([k, v]) => `${k.replace(/([A-Z])/g, ' $1').trim()}: ${v}`).join(' · ')}</div>
+                            )}
+                            {item.description && <div className="mt-1 whitespace-pre-wrap text-[11px]"><span className="text-muted-foreground">Description:</span> {item.description}</div>}
+                          </div>
+                        ))}
+
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Customer</div>
+                            <div className="mt-0.5">{lead.customerName || '-'} · {lead.customerMobile || '-'}</div>
+                            <div className="text-[11px] text-muted-foreground">{lead.customerEmail || '-'}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Address</div>
+                            <div className="mt-0.5 text-[11px]">{[lead.customerAddress, lead.customerCity, lead.customerState, lead.customerPincode].filter(Boolean).join(', ') || '-'}</div>
+                            {lead.gstNumber ? <div className="text-[11px] text-muted-foreground">GSTIN: {lead.gstNumber}</div> : null}
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Pickup Address</div>
+                            <div className="mt-0.5 text-[11px]">{lead.pickupAddress || lead.customerAddress || '-'}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Preferred Pickup</div>
+                            <div className="mt-0.5 text-[11px]">
+                              {lead.preferredPickupDate ? new Date(lead.preferredPickupDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Any date'} · {lead.preferredTimeSlot ? lead.preferredTimeSlot.charAt(0).toUpperCase() + lead.preferredTimeSlot.slice(1) : 'Any time'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+
                     {lead.status === 'price_offered' && lead.offeredPrice > 0 && (
                       <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-2.5 flex items-center justify-between">
                         <div>
@@ -207,6 +289,21 @@ export default function SellStatus() {
           </div>
         )}
       </div>
+
+      {lightbox && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm" onClick={() => setLightbox(null)}>
+          <button type="button" onClick={() => setLightbox(null)} className="absolute right-4 top-4 rounded-full bg-black/50 p-2 text-white hover:bg-black/70">
+            <X className="h-5 w-5" />
+          </button>
+          <div className="max-w-[92vw] max-h-[88vh]" onClick={(e) => e.stopPropagation()}>
+            {lightbox.kind === 'photo' ? (
+              <img src={getImageUrl(lightbox.url)} alt="" className="max-w-[92vw] max-h-[85vh] rounded-lg object-contain" />
+            ) : (
+              <video src={getImageUrl(lightbox.url)} controls autoPlay className="max-w-[92vw] max-h-[85vh] rounded-lg" />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

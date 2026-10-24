@@ -72,7 +72,7 @@ export default function AdminPages() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-xl font-black">Pages</h2>
         <button onClick={openNew} className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-bold uppercase tracking-wider text-primary-foreground shadow-[var(--shadow-glow)] hover:brightness-110">
           <Plus className="h-4 w-4" /> Add Page
@@ -83,7 +83,7 @@ export default function AdminPages() {
         <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">No pages yet. Create one to show in footer.</div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full">
+          <table className="w-full min-w-[560px]">
             <thead>
               <tr className="border-b border-border bg-surface/50">
                 <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Title</th>

@@ -7,6 +7,12 @@ import { Order } from "../models/order.model.js";
 import { User } from "../models/user.model.js";
 import { sendOrderDelivered } from "../config/email.js";
 import { generateOrderNumber } from "../utils/order.util.js";
+import { sendOrderNotification, dispatchNotification, LOW_STOCK_THRESHOLD } from "../config/notify.js";
+import { logger } from "../utils/logger.js";
+
+function actor(req) {
+  return { actorId: req.user?._id?.toString(), actor: req.user?.email || "unknown" };
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,8 +76,10 @@ export async function createProduct(req, res) {
     });
 
     res.status(201).json(product);
+    logger.admin("SUCCESS", "Product created", { ...actor(req), productId: product._id?.toString(), name: product.name, price: product.price, salePrice: product.salePrice, stock: product.stock });
   } catch (error) {
     console.error("Error creating product", error);
+    logger.admin("ERROR", "Product creation failed", { ...actor(req), error: error.message });
     res.status(500).json({ message: "Internal server error" });
   }
 }
@@ -97,6 +105,8 @@ export async function updateProduct(req, res) {
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
+
+    const before = { price: product.price, salePrice: product.salePrice, stock: product.stock };
 
     if (name) product.name = name;
     if (description) product.description = description;
@@ -135,8 +145,28 @@ export async function updateProduct(req, res) {
 
     await product.save();
     res.status(200).json(product);
+    logger.admin("SUCCESS", "Product updated", {
+      ...actor(req),
+      productId: id,
+      name: product.name,
+      before,
+      after: { price: product.price, salePrice: product.salePrice, stock: product.stock },
+    });
+
+    if (before.stock > LOW_STOCK_THRESHOLD && product.stock <= LOW_STOCK_THRESHOLD) {
+      dispatchNotification("low_stock", {
+        title: "⚠️ Low Stock Warning",
+        lines: [
+          `• ${product.name} — only ${product.stock} left`,
+          `Stock changed ${before.stock} → ${product.stock} during product edit`,
+          "",
+          "Restock soon to avoid missed sales.",
+        ],
+      });
+    }
   } catch (error) {
     console.error("Error updating products:", error);
+    logger.admin("ERROR", "Product update failed", { ...actor(req), productId: req.params?.id, error: error.message });
     res.status(500).json({ message: "Internal server error" });
   }
 }
@@ -150,16 +180,33 @@ export async function updateProductStock(req, res) {
       return res.status(400).json({ message: "Stock must be a whole number greater than or equal to 0" });
     }
 
+    const before = await Product.findById(id);
+    if (!before) return res.status(404).json({ message: "Product not found" });
+
     const product = await Product.findByIdAndUpdate(
       id,
       { $set: { stock } },
       { new: true, runValidators: true }
     );
 
-    if (!product) return res.status(404).json({ message: "Product not found" });
     res.status(200).json({ message: "Stock updated", product });
+    logger.admin("SUCCESS", "Product stock updated directly", { ...actor(req), productId: id, name: product.name, newStock: stock });
+
+    // Crossing into low stock from the admin panel also alerts the bots.
+    if (before.stock > LOW_STOCK_THRESHOLD && stock <= LOW_STOCK_THRESHOLD) {
+      dispatchNotification("low_stock", {
+        title: "⚠️ Low Stock Warning",
+        lines: [
+          `• ${product.name} — only ${stock} left`,
+          `Stock changed ${before.stock} → ${stock} from admin panel`,
+          "",
+          "Restock soon to avoid missed sales.",
+        ],
+      });
+    }
   } catch (error) {
     console.error("Error updating product stock:", error);
+    logger.admin("ERROR", "Product stock update failed", { ...actor(req), productId: req.params?.id, error: error.message });
     res.status(500).json({ message: "Internal server error" });
   }
 }
@@ -178,7 +225,7 @@ export async function getOrderById(req, res) {
 
 export async function getAllOrders(_, res) {
   try {
-    const orders = await Order.find()
+    const orders = await Order.find({ isDraft: { $ne: true } })
       .populate("user", "name email")
       .populate("orderItems.product")
       .sort({ createdAt: -1 });
@@ -204,6 +251,7 @@ export async function updateOrderStatus(req, res) {
       return res.status(404).json({ error: "Order not found" });
     }
 
+    const previousStatus = order.status;
     order.status = status;
 
     if (status === "shipped" && !order.shippedAt) {
@@ -224,6 +272,16 @@ export async function updateOrderStatus(req, res) {
     }
 
     res.status(200).json({ message: "Order status updated successfully", order });
+    logger.admin("SUCCESS", "Order status updated", { ...actor(req), orderId, orderNumber: order.orderNumber, from: previousStatus, to: status });
+    dispatchNotification("order_status", {
+      title: `🚚 Order #${order.orderNumber || orderId.slice(-6).toUpperCase()} → ${String(status).toUpperCase()}`,
+      lines: [
+        `Customer: ${order.shippingAddress?.fullName || "-"}`,
+        `Total: ₹${(order.totalPrice || 0).toLocaleString("en-IN")}`,
+        `Status: ${previousStatus} → ${status}`,
+        `Updated by: ${req.user?.email || "admin"}`,
+      ],
+    });
   } catch (error) {
     console.error("Error in updateOrderStatus controller:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -238,6 +296,7 @@ export async function toggleAdvancePaid(req, res) {
     order.advancePaid = !order.advancePaid;
     await order.save();
     res.status(200).json({ message: "Advance status updated", advancePaid: order.advancePaid });
+    logger.admin("SUCCESS", "Order advance-paid toggled", { ...actor(req), orderId, orderNumber: order.orderNumber, advancePaid: order.advancePaid });
   } catch (error) {
     res.status(500).json({ error: "Internal server error" });
   }
@@ -252,6 +311,7 @@ export async function toggleBalancePaid(req, res) {
     order.balancePaidAt = order.balancePaid ? new Date() : null;
     await order.save();
     res.status(200).json({ message: "Balance payment status updated", balancePaid: order.balancePaid });
+    logger.admin("SUCCESS", "Order balance-paid toggled", { ...actor(req), orderId, orderNumber: order.orderNumber, balancePaid: order.balancePaid });
   } catch (error) {
     console.error("Error in toggleBalancePaid:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -268,6 +328,7 @@ export async function settleOrder(req, res) {
     order.balancePaidAt = new Date();
     await order.save();
     res.status(200).json({ message: "Order settled (advance + balance paid)", order });
+    logger.admin("SUCCESS", "Order settled (advance + balance)", { ...actor(req), orderId, orderNumber: order.orderNumber, total: order.totalPrice });
   } catch (error) {
     console.error("Error in settleOrder:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -298,6 +359,7 @@ export async function updateOrderTracking(req, res) {
     await order.save();
 
     res.status(200).json({ message: "Tracking link updated", trackingUrl: order.trackingUrl });
+    logger.admin("SUCCESS", "Order tracking updated", { ...actor(req), orderId, orderNumber: order.orderNumber, trackingUrl });
   } catch (error) {
     console.error("Error in updateOrderTracking:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -316,11 +378,12 @@ export async function getAllCustomers(_, res) {
 
 export async function getDashboardStats(_, res) {
   try {
-    const totalOrders = await Order.countDocuments();
+    const totalOrders = await Order.countDocuments({ isDraft: { $ne: true } });
 
     const revenueResult = await Order.aggregate([
       {
         $match: {
+          isDraft: { $ne: true },
           status: { $nin: ["cancelled", "returned"] },
           $or: [
             { "paymentResult.status": { $ne: "cod_advance" } },
@@ -365,6 +428,7 @@ export const deleteProduct = async (req, res) => {
 
     await Product.findByIdAndDelete(id);
     res.status(200).json({ message: "Product deleted successfully" });
+    logger.admin("WARN", "Product deleted", { ...actor(req), productId: id, name: product.name });
   } catch (error) {
     console.error("Error deleting product:", error);
     res.status(500).json({ message: "Failed to delete product" });
@@ -377,7 +441,7 @@ export async function getCustomerDetail(req, res) {
     const customer = await User.findById(customerId);
     if (!customer) return res.status(404).json({ error: "Customer not found" });
 
-    const orders = await Order.find({ user: customerId })
+    const orders = await Order.find({ user: customerId, isDraft: { $ne: true } })
       .populate("orderItems.product")
       .sort({ createdAt: -1 });
 
@@ -448,6 +512,7 @@ export async function updateCustomer(req, res) {
       message: "Customer updated",
       customer: customer.toSafeObject(),
     });
+    logger.admin("SUCCESS", "Customer updated", { ...actor(req), customerId, email: customer.email, changedRole: role });
   } catch (error) {
     console.error("Error updating customer:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -488,6 +553,7 @@ export async function createCustomer(req, res) {
     });
 
     res.status(201).json({ message: "Customer created", customer: user.toSafeObject() });
+    logger.admin("SUCCESS", "Customer created", { ...actor(req), userId: user._id.toString(), email: safeEmail, role: user.role });
   } catch (error) {
     console.error("Error creating customer:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -496,19 +562,20 @@ export async function createCustomer(req, res) {
 
 export async function getOrderStats(_, res) {
   try {
-    const total = await Order.countDocuments();
-    const cod = await Order.countDocuments({ "paymentResult.status": "cod_advance" });
-    const codAdvancePaid = await Order.countDocuments({ "paymentResult.status": "cod_advance", advancePaid: true });
-    const codBalancePending = await Order.countDocuments({ "paymentResult.status": "cod_advance", balancePaid: false });
-    const codSettled = await Order.countDocuments({ "paymentResult.status": "cod_advance", balancePaid: true });
+    const total = await Order.countDocuments({ isDraft: { $ne: true } });
+    const cod = await Order.countDocuments({ isDraft: { $ne: true }, "paymentResult.status": "cod_advance" });
+    const codAdvancePaid = await Order.countDocuments({ isDraft: { $ne: true }, "paymentResult.status": "cod_advance", advancePaid: true });
+    const codBalancePending = await Order.countDocuments({ isDraft: { $ne: true }, "paymentResult.status": "cod_advance", balancePaid: false });
+    const codSettled = await Order.countDocuments({ isDraft: { $ne: true }, "paymentResult.status": "cod_advance", balancePaid: true });
 
     const codAgg = await Order.aggregate([
-      { $match: { "paymentResult.status": "cod_advance", advancePaid: true } },
+      { $match: { isDraft: { $ne: true }, "paymentResult.status": "cod_advance", advancePaid: true } },
       { $group: { _id: null, totalAdvance: { $sum: "$codAdvanceAmount" }, totalValue: { $sum: "$totalPrice" } } },
     ]);
     const codStats = codAgg[0] || { totalAdvance: 0, totalValue: 0 };
 
     const statusBreakdown = await Order.aggregate([
+      { $match: { isDraft: { $ne: true } } },
       { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
     const byStatus = {};
@@ -535,7 +602,7 @@ export async function getOrderStats(_, res) {
 
 export async function getMissedOrders(_, res) {
   try {
-    const orders = await Order.find({ isMissedOrder: true })
+    const orders = await Order.find({ isMissedOrder: true, isDraft: { $ne: true } })
       .populate("user", "name email")
       .populate("orderItems.product")
       .sort({ createdAt: -1 });
@@ -641,7 +708,18 @@ export async function createMissedOrder(req, res) {
       await Product.findByIdAndUpdate(item.product, { $inc: { stock: -item.quantity } });
     }
 
+    sendOrderNotification(order, user, "missed-order-tool");
+
     res.status(201).json({ message: "Missed order created successfully", order });
+    logger.admin("SUCCESS", "Missed order created manually", {
+      ...actor(req),
+      orderId: order._id?.toString(),
+      orderNumber: order.orderNumber,
+      userId,
+      total,
+      paymentType,
+      razorpayPaymentId: razorpayPaymentId || null,
+    });
   } catch (error) {
     console.error("Error in createMissedOrder:", error);
     res.status(500).json({ error: "Internal server error" });

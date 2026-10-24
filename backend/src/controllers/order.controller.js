@@ -183,7 +183,7 @@ export async function createOrder(req, res) {
 
 export async function getUserOrders(req, res) {
   try {
-    const orders = await Order.find({ user: req.user._id })
+    const orders = await Order.find({ user: req.user._id, isDraft: { $ne: true } })
       .populate("orderItems.product")
       .sort({ createdAt: -1 });
 

@@ -1,11 +1,89 @@
 import { Router } from "express";
+import mongoose from "mongoose";
+import JSZip from "jszip";
+import * as BSON from "bson";
 import { protectRoute, adminOnly } from "../middleware/auth.middleware.js";
 import { getSettings, updateSettings, getPublicKey, uploadBanners, deleteBanner } from "../controllers/setting.controller.js";
 import { sendTestEmail, sendEmail } from "../config/email.js";
 import { getSetting } from "../models/setting.model.js";
 import { upload } from "../middleware/multer.middleware.js";
+import { logger, istDateString } from "../utils/logger.js";
 
 const router = Router();
+
+// One-click MongoDB backup download (pure-Node dump — works on any host,
+// no mongodump binary needed). Single JSON file restorable via
+// `node scripts/restore-db.js <file>`.
+router.get("/backup", protectRoute, adminOnly, async (req, res) => {
+  try {
+    const db = mongoose.connection.db;
+    const collections = await db.listCollections().toArray();
+    const dump = {
+      meta: {
+        app: "primexpc",
+        format: "single-file-v1",
+        exportedAt: new Date().toISOString(),
+        exportedBy: req.user?.email || "admin",
+      },
+      collections: {},
+    };
+    let totalDocs = 0;
+    for (const { name } of collections) {
+      const docs = await db.collection(name).find({}).toArray();
+      dump.collections[name] = docs;
+      totalDocs += docs.length;
+    }
+    const now = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    const filename = `primexpc-backup-${istDateString()}-${hhmm}.json`;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    logger.admin("INFO", "Database backup downloaded", { actor: req.user?.email, collections: collections.length, documents: totalDocs });
+    res.send(JSON.stringify(dump, null, 2));
+  } catch (err) {
+    logger.admin("ERROR", "Database backup failed", { actor: req.user?.email, error: err.message });
+    res.status(500).json({ error: "Backup failed" });
+  }
+});
+
+// Standard mongodump-style backup: <db>/<collection>.bson + metadata.json
+// in a zip — restorable with `mongorestore` or importable in MongoDB Compass.
+router.get("/backup-mongo", protectRoute, adminOnly, async (req, res) => {
+  try {
+    const db = mongoose.connection.db;
+    const dbName = db.databaseName || "primexpc";
+    const zip = new JSZip();
+    const dumpDir = zip.folder(dbName);
+    const collections = await db.listCollections().toArray();
+    let totalDocs = 0;
+
+    for (const { name } of collections) {
+      const docs = await db.collection(name).find({}).toArray();
+      const chunks = [];
+      for (const doc of docs) {
+        chunks.push(BSON.serialize(doc));
+      }
+      dumpDir.file(`${name}.bson`, Buffer.concat(chunks));
+      let indexes = [{ v: 2, key: { _id: 1 }, name: "_id_" }];
+      try {
+        indexes = await db.collection(name).indexes();
+      } catch { /* fall back to the default _id index */ }
+      dumpDir.file(`${name}.metadata.json`, JSON.stringify({ options: {}, indexes }));
+      totalDocs += docs.length;
+    }
+
+    const buffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+    const now = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${dbName}-dump-${istDateString()}-${hhmm}.zip"`);
+    logger.admin("INFO", "MongoDB dump (BSON) downloaded", { actor: req.user?.email, database: dbName, collections: collections.length, documents: totalDocs, sizeKb: Math.round(buffer.length / 1024) });
+    res.send(buffer);
+  } catch (err) {
+    logger.admin("ERROR", "MongoDB dump failed", { actor: req.user?.email, error: err.message });
+    res.status(500).json({ error: "Dump failed" });
+  }
+});
 
 router.get("/public-key", getPublicKey);
 router.get("/", protectRoute, adminOnly, getSettings);
@@ -20,6 +98,17 @@ router.post("/contact", async (req, res) => {
       return res.status(400).json({ error: "Name, email, and message are required" });
     }
     const storeEmail = await getSetting("store_email", "primexpc24@gmail.com");
+    const { dispatchNotification } = await import("../config/notify.js");
+    dispatchNotification("contact_form", {
+      title: "📩 New Contact Form Message",
+      lines: [
+        `From: ${String(name).replace(/[<>"'&]/g, "")}`,
+        `Email: ${String(email).replace(/[<>"'&]/g, "")}`,
+        `Subject: ${String(subject || "-").replace(/[<>"'&]/g, "")}`,
+        "",
+        String(message).replace(/[<>"'&]/g, "").slice(0, 500),
+      ],
+    });
     await sendEmail({
       to: storeEmail,
       subject: `Contact Form: ${subject || "New Inquiry"}`,
@@ -108,6 +197,16 @@ router.post("/test-email", protectRoute, adminOnly, async (req, res) => {
     res.status(200).json({ message: "Test email sent" });
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to send test email" });
+  }
+});
+
+router.post("/test-notification", protectRoute, adminOnly, async (req, res) => {
+  try {
+    const { sendTestNotification } = await import("../config/notify.js");
+    await sendTestNotification(String(req.body.channel || ""));
+    res.status(200).json({ message: "Test notification sent" });
+  } catch (err) {
+    res.status(400).json({ error: err.message || "Failed to send test notification" });
   }
 });
 

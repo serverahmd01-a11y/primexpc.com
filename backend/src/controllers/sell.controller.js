@@ -7,53 +7,8 @@ import { sendEmail, sendSellNotification } from "../config/email.js";
 import { createPickupOrder, trackPickup, generatePickupLabel } from "../config/shiprocket.js";
 import crypto from "crypto";
 
-const otpStore = new Map();
-
-function generateOTP() {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
-
-export async function sendOTP(req, res) {
-  try {
-    const { mobile } = req.body;
-    if (!mobile || mobile.length < 10) {
-      return res.status(400).json({ message: "Valid mobile number required" });
-    }
-    const otp = generateOTP();
-    const expiry = Date.now() + 5 * 60 * 1000;
-    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
-    otpStore.set(mobile, { hashedOtp, expiry });
-    console.log(`OTP for ${mobile}: ${otp}`);
-    res.status(200).json({ message: "OTP sent successfully", expiresAt: expiry });
-  } catch (error) {
-    res.status(500).json({ message: "Failed to send OTP" });
-  }
-}
-
-export async function verifyOTP(req, res) {
-  try {
-    const { mobile, otp } = req.body;
-    if (!mobile || !otp) {
-      return res.status(400).json({ message: "Mobile and OTP required" });
-    }
-    const stored = otpStore.get(mobile);
-    if (!stored) {
-      return res.status(400).json({ message: "OTP not found or expired" });
-    }
-    if (Date.now() > stored.expiry) {
-      otpStore.delete(mobile);
-      return res.status(400).json({ message: "OTP expired" });
-    }
-    const hashedInput = crypto.createHash("sha256").update(otp).digest("hex");
-    if (hashedInput !== stored.hashedOtp) {
-      return res.status(400).json({ message: "Invalid OTP" });
-    }
-    otpStore.delete(mobile);
-    res.status(200).json({ message: "OTP verified", verified: true });
-  } catch (error) {
-    res.status(500).json({ message: "OTP verification failed" });
-  }
-}
+// Note: this flow intentionally has no OTP/SMS step — leads are submitted
+// directly and tracked by mobile number on the Sell Status page.
 
 export async function uploadSellFile(req, res, next) {
   try {
@@ -170,10 +125,13 @@ export async function getMyLeads(req, res) {
       const leads = await SellLead.find({ customerMobile: mobile }).sort({ createdAt: -1 });
       return res.status(200).json(leads);
     }
-    if (!req.user?.email) {
-      return res.status(403).json({ message: "Login required to view leads" });
+    // Logged-in customers only see leads that also match their account email;
+    // guests (no login) can track by mobile — same as the Sell Status page works.
+    if (req.user) {
+      const leads = await SellLead.find({ customerMobile: mobile, customerEmail: req.user.email }).sort({ createdAt: -1 });
+      return res.status(200).json(leads);
     }
-    const leads = await SellLead.find({ customerMobile: mobile, customerEmail: req.user.email }).sort({ createdAt: -1 });
+    const leads = await SellLead.find({ customerMobile: mobile }).sort({ createdAt: -1 });
     res.status(200).json(leads);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch leads" });
@@ -182,9 +140,22 @@ export async function getMyLeads(req, res) {
 
 export async function getMyLeadsByUser(req, res) {
   try {
-    const email = req.user?.email;
-    if (!email) return res.status(400).json({ message: "User email not found" });
-    const leads = await SellLead.find({ customerEmail: email }).sort({ createdAt: -1 });
+    const user = req.user;
+    if (!user?.email) return res.status(400).json({ message: "User email not found" });
+
+    // Match by account email OR any mobile saved in the user's addresses, so
+    // the lead shows up even if the customer typed a different email in the
+    // sell form — same "My Orders" reliability customers expect.
+    const phones = [...new Set(
+      (user.addresses || [])
+        .map((a) => String(a.phoneNumber || "").trim())
+        .filter((p) => p.replace(/\D/g, "").length >= 10)
+    )];
+    const query = phones.length
+      ? { $or: [{ customerEmail: user.email }, { customerMobile: { $in: phones } }] }
+      : { customerEmail: user.email };
+
+    const leads = await SellLead.find(query).sort({ createdAt: -1 });
     res.status(200).json(leads);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch leads" });
@@ -285,6 +256,9 @@ export async function offerPrice(req, res) {
     }
     const lead = await SellLead.findById(req.params.id);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
+    if (!["new", "contacted", "price_offered"].includes(lead.status)) {
+      return res.status(400).json({ message: `Cannot offer price on a lead in '${lead.status}' status` });
+    }
 
     lead.offeredPrice = offeredPrice;
     lead.status = "price_offered";
@@ -404,8 +378,11 @@ export async function getPickupLabel(req, res) {
 
 export async function getDashboardStats(req, res) {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // IST "today", consistent with the rest of the shop's logging.
+    const istDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
+    const today = new Date(Date.parse(`${istDate}T00:00:00+05:30`));
 
     const [
       newLeadsToday,
@@ -534,11 +511,14 @@ export async function handleShiprocketWebhook(req, res) {
 
 export async function customerRespond(req, res) {
   try {
-    const { action } = req.body;
+    const { action, mobile } = req.body;
     const lead = await SellLead.findById(req.params.id);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
 
-    if (req.user && req.user.email !== lead.customerEmail) {
+    const isStaff = req.user && ["admin", "ca", "shipping"].includes(req.user.role);
+    const ownByEmail = req.user && req.user.email === lead.customerEmail;
+    const ownByMobile = mobile && String(mobile).trim() === lead.customerMobile;
+    if (!isStaff && !ownByEmail && !ownByMobile) {
       return res.status(403).json({ message: "Not authorized to respond to this lead" });
     }
 

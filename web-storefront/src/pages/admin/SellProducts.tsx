@@ -244,7 +244,7 @@ export default function SellProducts() {
         <div className="text-center py-12 text-muted-foreground">Loading...</div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[860px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface/50">
                 <th className="text-left px-4 py-3 font-bold text-xs uppercase">Name</th>

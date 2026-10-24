@@ -4,12 +4,14 @@ import { ArrowLeft, Check, CreditCard, Landmark, Wallet, Zap, ShieldCheck, Bankn
 import { useCart, formatINR } from '@/lib/cart';
 import { getImageUrl, downloadInvoice as genInvoice, formatOrderNo } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
-import { userApi, paymentApi, orderApi } from '@/lib/api';
+import { userApi, paymentApi } from '@/lib/api';
 import api from '@/lib/api';
 import { beginCheckout, purchase as gaPurchase } from '@/lib/analytics';
 
 type Payment = { id: string; label: string; desc: string; icon: typeof CreditCard };
 type SavedAddress = { _id: string; label: string; fullName: string; streetAddress: string; city: string; state: string; zipCode: string; phoneNumber?: string; isDefault: boolean };
+type RzpResp = { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string };
+type CheckoutInfo = { isCod: boolean; advanceAmount: number; total: number };
 
 const PAYMENT_OPTIONS: Payment[] = [
   { id: 'online', label: 'Online Payment', desc: 'Pay via UPI, Card, Net Banking — Razorpay', icon: CreditCard },
@@ -49,7 +51,9 @@ export default function Checkout() {
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [form, setForm] = useState({ name: '', email: '', phone: '', pincode: '', street: '', landmark: '', city: '', state: '', country: 'India' });
   const [processing, setProcessing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
+  const [unconfirmed, setUnconfirmed] = useState<{ resp: RzpResp; info: CheckoutInfo } | null>(null);
   const [razorpayKeyId, setRazorpayKeyId] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
 
@@ -101,23 +105,45 @@ export default function Checkout() {
     });
   };
 
+  const confirmPaidOrder = async (resp: RzpResp, info: CheckoutInfo) => {
+    setConfirming(true);
+    try {
+      const res = await paymentApi.placeOrder({
+        razorpay_order_id: resp.razorpay_order_id,
+        razorpay_payment_id: resp.razorpay_payment_id,
+        razorpay_signature: resp.razorpay_signature,
+      });
+      setUnconfirmed(null);
+      finish(res.order?._id || resp.razorpay_order_id, res.order?.orderNumber, info.isCod, info.isCod ? info.advanceAmount : info.total);
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   const onPlace = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (items.length === 0 || processing) return;
     setError('');
+    setUnconfirmed(null);
 
     const isCod = payment === 'cod';
+    let paidConfirmFailed = false;
 
     setProcessing(true);
     try {
-      const freshSubtotal = (await refreshPrices()) as number | undefined;
-      const currentTotal = (typeof freshSubtotal === 'number' && freshSubtotal > 0) ? freshSubtotal : total;
-      const payAmount = isCod ? Math.round(currentTotal * 0.25) : currentTotal;
-
       const loaded = await loadRazorpayScript();
       if (!loaded) throw new Error('Could not load payment gateway. Check your connection.');
 
-      const order = await paymentApi.createOrder({ amount: payAmount * 100, receipt: 'rcpt_' + Date.now().toString(36) });
+      // Server validates stock/prices and stores a draft order BEFORE payment,
+      // so checkout can no longer fail after the money is taken. The draft is
+      // the source of truth — confirmed by this tab or by the Razorpay webhook.
+      const order = await paymentApi.createOrder({
+        paymentType: isCod ? 'cod' : 'prepaid',
+        items: items.map((i) => ({ productId: i.productId || i.slug, quantity: i.qty })),
+        shippingAddress: { fullName: form.name, streetAddress: form.street, city: form.city, state: form.state, zipCode: form.pincode, phoneNumber: form.phone },
+        receipt: 'rcpt_' + Date.now().toString(36),
+      });
+      const info: CheckoutInfo = { isCod: !!order.isCod, advanceAmount: order.advanceAmount || 0, total };
 
       await new Promise<void>((resolve, reject) => {
         const rzp = new window.Razorpay!({
@@ -129,43 +155,26 @@ export default function Checkout() {
           description: isCod ? `Convenience fee — COD order` : `Order — ${items.length} item(s)`,
           prefill: { name: form.name, email: form.email, contact: form.phone },
           theme: { color: '#10b981' },
-          handler: async (resp: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
-            try {
-              const v = await paymentApi.verify(resp);
-              if (!v.verified) { reject(new Error('Payment verification failed')); return; }
-
-              if (isCod) {
-                const res = await orderApi.create({
-                  orderItems: items.map((i) => ({ product: i.productId || i.slug, name: i.name, price: i.price, quantity: i.qty, gstRate: i.gstRate || 18, image: i.image || '' })),
-                  shippingAddress: { fullName: form.name, streetAddress: form.street, city: form.city, state: form.state, zipCode: form.pincode, phoneNumber: form.phone },
-                  paymentResult: { id: resp.razorpay_payment_id, status: 'cod_advance' },
-                  razorpay_order_id: resp.razorpay_order_id,
-                  razorpay_signature: resp.razorpay_signature,
-                  totalPrice: currentTotal,
-                  codAdvanceAmount: payAmount,
-                });
-                finish(res.order?._id || resp.razorpay_order_id, res.order?.orderNumber, true, payAmount);
-              } else {
-                await paymentApi.placeOrder({
-                  razorpay_payment_id: resp.razorpay_payment_id,
-                  razorpay_order_id: resp.razorpay_order_id,
-                  razorpay_signature: resp.razorpay_signature,
-                  cartItems: items.map((i) => ({ productId: i.productId || i.slug, quantity: i.qty })),
-                  shippingAddress: { fullName: form.name, streetAddress: form.street, city: form.city, state: form.state, zipCode: form.pincode, phoneNumber: form.phone },
-                  totalPrice: currentTotal,
-                });
-                finish(resp.razorpay_order_id);
-              }
-              resolve();
-            } catch (err) { reject(err); }
+          handler: (resp: RzpResp) => {
+            confirmPaidOrder(resp, info).then(resolve).catch((err: unknown) => {
+              // Payment succeeded but confirmation failed. The Razorpay webhook
+              // confirms server-side too; keep the details so the user can retry.
+              paidConfirmFailed = true;
+              setUnconfirmed({ resp, info });
+              const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Order confirmation failed';
+              setError(`${msg} — your payment is safe (ID: ${resp.razorpay_payment_id}). Tap "Confirm My Order" below.`);
+              reject(new Error('CONFIRM_FAILED'));
+            });
           },
           modal: { ondismiss: () => reject(new Error('Payment cancelled')) },
         });
         rzp.open();
       });
     } catch (err) {
-      const msg = (err as any)?.response?.data?.error || (err as any)?.response?.data?.message || (err instanceof Error ? err.message : 'Payment failed');
-      setError(msg);
+      if (!paidConfirmFailed) {
+        const msg = (err as any)?.response?.data?.error || (err as any)?.response?.data?.message || (err instanceof Error ? err.message : 'Payment failed');
+        setError(msg);
+      }
     } finally {
       setProcessing(false);
     }
@@ -274,6 +283,24 @@ export default function Checkout() {
               <div className="mt-4 flex items-baseline justify-between border-t border-border pt-4"><span className="font-display text-sm font-bold uppercase tracking-wider">Total</span><span className="font-display text-2xl font-black text-primary">{formatINR(total)}</span></div>
 
               {error && <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive">{error}</div>}
+
+              {unconfirmed && (
+                <div className="mt-4 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-3 text-xs">
+                  <p className="font-bold text-amber-600">Payment received — order not confirmed yet</p>
+                  <p className="mt-1 text-muted-foreground">Payment ID: <span className="font-mono">{unconfirmed.resp.razorpay_payment_id}</span></p>
+                  <button
+                    type="button"
+                    disabled={confirming}
+                    onClick={() => confirmPaidOrder(unconfirmed.resp, unconfirmed.info).catch((err: unknown) => {
+                      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Confirmation failed — support will confirm your order automatically.';
+                      setError(msg);
+                    })}
+                    className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-amber-500 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:brightness-110 disabled:opacity-60"
+                  >
+                    {confirming ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Confirming...</> : 'Confirm My Order'}
+                  </button>
+                </div>
+              )}
 
               <label className="mt-4 flex items-start gap-2 cursor-pointer">
                 <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer" />

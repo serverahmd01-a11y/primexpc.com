@@ -9,6 +9,19 @@ import Pagination, { paginate, sortNewestFirst } from './Pagination';
 
 const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3000/api').replace(/\/api\/?$/, '');
 
+// Stored deal time (UTC instant) -> "YYYY-MM-DDTHH:mm" in IST for the
+// datetime-local input, so the admin sees and edits Indian wall-clock time.
+function toIstDateTimeLocal(iso: string) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const parts: Record<string, string> = {};
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(d).forEach((p) => { parts[p.type] = p.value; });
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
 export default function AdminProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [allCategories, setAllCategories] = useState<{ _id: string; name: string; parent?: { _id: string; name: string } | null; condition?: string }[]>([]);
@@ -76,7 +89,7 @@ export default function AdminProducts() {
     setStock(String(p.stock)); setDesc(p.description); setImages([]);
     setExistingImages(p.images || []); setRemovedImages([]);
     setFeatured(p.featured || false); setSalePrice(p.salePrice ? String(p.salePrice) : '');
-    setDealEndsAt(p.dealEndsAt ? new Date(p.dealEndsAt).toISOString().slice(0, 16) : '');
+    setDealEndsAt(p.dealEndsAt ? toIstDateTimeLocal(p.dealEndsAt) : '');
     setGstRate(String(p.gstRate || 18)); setProductCondition(p.condition || 'new');
     setSpecifications(p.specifications || []);
     setMsg(null); setShowModal(true);
@@ -100,7 +113,10 @@ export default function AdminProducts() {
       if (subCat) fd.append('subCategory', subCat);
       fd.append('featured', String(featured));
       if (salePrice) fd.append('salePrice', salePrice);
-      if (dealEndsAt) fd.append('dealEndsAt', dealEndsAt);
+      // datetime-local gives IST wall-clock — send it with an explicit +05:30
+      // offset so the stored instant matches what the admin picked (the old
+      // code sent it raw and the server's UTC timezone shifted the deal time).
+      if (dealEndsAt) fd.append('dealEndsAt', new Date(`${dealEndsAt}:00+05:30`).toISOString());
       fd.append('gstRate', gstRate || '18');
       fd.append('condition', productCondition || 'new');
       fd.append('specifications', JSON.stringify(specifications));
@@ -119,7 +135,7 @@ export default function AdminProducts() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => setActiveCat('all')} className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition ${activeCat === 'all' ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:border-primary'}`}>All</button>
           {categories.filter((c) => !(c as any).parent).map((c) => (

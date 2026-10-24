@@ -111,11 +111,19 @@ const orderSchema = new mongoose.Schema(
     balancePaid: { type: Boolean, default: false },
     balancePaidAt: { type: Date, default: null },
     isMissedOrder: { type: Boolean, default: false },
+    // Draft flow: order is created as a draft when checkout starts (before payment).
+    // It becomes a real order (isDraft: false) only after payment is verified —
+    // by the browser callback OR the Razorpay webhook, whichever arrives first.
+    isDraft: { type: Boolean, default: false },
+    razorpayOrderId: { type: String, default: "" },
+    paymentType: { type: String, enum: ["prepaid", "cod", ""], default: "" },
   },
   { timestamps: true }
 );
 
 orderSchema.index({ "paymentResult.id": 1 }, { unique: true, sparse: true });
+orderSchema.index({ razorpayOrderId: 1 });
+orderSchema.index({ isDraft: 1 });
 orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ status: 1 });
 orderSchema.index({ isMissedOrder: 1 });

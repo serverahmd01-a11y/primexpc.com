@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { protectRoute } from "../middleware/auth.middleware.js";
+import { protectRoute, optionalAuth } from "../middleware/auth.middleware.js";
 import { upload } from "../middleware/multer.middleware.js";
 import {
-  sendOTP, verifyOTP, uploadSellFile, submitLead,
+  uploadSellFile, submitLead,
   getMyLeads, getMyLeadsByUser, getLeadById, customerRespond,
 } from "../controllers/sell.controller.js";
 
@@ -19,14 +19,14 @@ const uploadWrapper = (req, res, next) => {
   });
 };
 
-router.post("/send-otp", sendOTP);
-router.post("/verify-otp", verifyOTP);
 router.post("/upload", uploadWrapper, uploadSellFile);
 router.post("/submit", submitLead);
 
 router.get("/leads/me", protectRoute, getMyLeadsByUser);
-router.get("/leads", protectRoute, getMyLeads);
-router.get("/leads/:id", protectRoute, getLeadById);
-router.post("/leads/:id/respond", protectRoute, customerRespond);
+// optionalAuth: customers track their sell request by mobile without login —
+// the controller authorizes per lead (staff / matching email / matching mobile).
+router.get("/leads", optionalAuth, getMyLeads);
+router.get("/leads/:id", optionalAuth, getLeadById);
+router.post("/leads/:id/respond", optionalAuth, customerRespond);
 
 export default router;

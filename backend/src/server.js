@@ -21,6 +21,7 @@ import settingRoutes from "./routes/setting.route.js";
 import shiprocketRoutes from "./routes/shiprocket.route.js";
 import shippingRoutes from "./routes/shipping.route.js";
 import paymentRoutes from "./routes/payment.route.js";
+import notifyRoutes from "./routes/notify.route.js";
 import pageRoutes from "./routes/page.route.js";
 import sellRoutes from "./routes/sell.route.js";
 import sellAdminRoutes from "./routes/sellAdmin.route.js";
@@ -35,10 +36,11 @@ import {
 } from "./middleware/security.middleware.js";
 
 import { handleWebhook } from "./controllers/payment.controller.js";
+import { startReportBot } from "./config/telegramReportBot.js";
 import { handleShiprocketWebhook } from "./controllers/sell.controller.js";
 import { getSitemap } from "./controllers/sitemap.controller.js";
 import { protectRoute, adminOnly } from "./middleware/auth.middleware.js";
-import { getLogs, getAvailableLogFiles } from "./utils/logger.js";
+import { getLogs, getAvailableLogFiles, getLogFilePath, istDateString, LOG_TYPES } from "./utils/logger.js";
 
 const app = express();
 
@@ -106,6 +108,7 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/admin/notify-channels", notifyRoutes);
 app.use("/api/pages", pageRoutes);
 app.use("/api/admin/pages", pageRoutes);
 app.use("/api/sell", sellRoutes);
@@ -127,12 +130,77 @@ app.get("/api/admin/logs/files", protectRoute, adminOnly, (req, res) => {
   }
 });
 
+app.get("/api/admin/logs/download", protectRoute, adminOnly, (req, res) => {
+  try {
+    const { type, date } = req.query;
+    const day = String(date || istDateString());
+
+    if (type === "all") {
+      const parts = [];
+      for (const t of LOG_TYPES) {
+        const file = getLogFilePath(t, day);
+        if (file && fs.existsSync(file)) {
+          parts.push(`===== ${t} (${day}) =====\n`);
+          parts.push(fs.readFileSync(file, "utf-8"));
+          parts.push("\n");
+        }
+      }
+      if (parts.length === 0) return res.status(404).json({ error: "Log file not found" });
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="all_${day}.log"`);
+      return res.send(parts.join(""));
+    }
+
+    const file = getLogFilePath(String(type), day);
+    if (!file || !fs.existsSync(file)) {
+      return res.status(404).json({ error: "Log file not found" });
+    }
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${type}_${day}.log"`);
+    res.send(fs.readFileSync(file, "utf-8"));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Normalize "2026-10-24T17:12:06.379Z" (legacy UTC lines) and
+// "2026-10-24 23:11:35 IST" into one comparable IST-based key.
+function logTsKey(ts) {
+  if (typeof ts !== "string") return "";
+  if (ts.includes("T")) {
+    const d = new Date(ts);
+    if (!isNaN(d)) {
+      return new Date(d.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
+    }
+  }
+  return ts.replace(" IST", "");
+}
+
 app.get("/api/admin/logs", protectRoute, adminOnly, (req, res) => {
   try {
     const { type, date } = req.query;
+    const day = String(date || istDateString());
+
+    // "all" merges every log type into one timeline so the admin can see
+    // the full story of a transaction in one place.
+    if (type === "all") {
+      const merged = [];
+      for (const t of LOG_TYPES) {
+        for (const entry of getLogs(t, day)) {
+          merged.push({ ...entry, type: t });
+        }
+      }
+      merged.sort((a, b) => {
+        const ka = logTsKey(a.timestamp);
+        const kb = logTsKey(b.timestamp);
+        return ka < kb ? 1 : ka > kb ? -1 : 0;
+      });
+      return res.json({ type, date: day, logs: merged });
+    }
+
     if (!type) return res.status(400).json({ error: "type query param required" });
-    const logs = getLogs(type, date);
-    res.json({ type, date: date || new Date().toISOString().slice(0, 10), logs });
+    const logs = getLogs(type, day);
+    res.json({ type, date: day, logs });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -174,6 +242,7 @@ if (ENV.NODE_ENV === "production") {
 
 const startServer = async () => {
   await connectDB();
+  startReportBot();
   app.listen(ENV.PORT, () => {
     console.log(`Server running on port ${ENV.PORT}`);
   });

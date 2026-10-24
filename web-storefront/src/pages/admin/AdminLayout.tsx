@@ -1,6 +1,6 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
-import { LayoutDashboard, Package, ClipboardList, Users, LogOut, ShoppingBag, Settings, Percent, Tag, Menu, X, FileText, Coins, PackagePlus, FileSpreadsheet, ScrollText, HelpCircle, Boxes } from 'lucide-react';
+import { LayoutDashboard, Package, ClipboardList, Users, LogOut, ShoppingBag, Settings, Percent, Tag, Menu, X, FileText, Coins, PackagePlus, FileSpreadsheet, ScrollText, HelpCircle, Boxes, Bot } from 'lucide-react';
 import { useState } from 'react';
 
 const adminNav = [
@@ -16,6 +16,7 @@ const adminNav = [
   { path: '/admin/gst', label: 'GST', icon: Percent },
   { path: '/admin/pages', label: 'Pages', icon: FileText },
   { path: '/admin/settings', label: 'Settings', icon: Settings },
+  { path: '/admin/bots', label: 'Bots', icon: Bot },
   { path: '/admin/logs', label: 'Logs', icon: ScrollText },
   { path: '/admin/help', label: 'Help', icon: HelpCircle },
 ];
@@ -109,7 +110,7 @@ export default function AdminLayout() {
       </aside>
 
       <main className="flex-1 overflow-auto">
-        <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur px-6 py-4">
+        <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent/20">
@@ -128,7 +129,7 @@ export default function AdminLayout() {
             <Link to="/" className="text-xs uppercase tracking-wider text-muted-foreground hover:text-primary">View Store →</Link>
           </div>
         </header>
-        <div className="p-6">
+        <div className="p-3 sm:p-6">
           <Outlet />
         </div>
       </main>

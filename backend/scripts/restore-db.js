@@ -9,9 +9,28 @@ const DB_NAME = new URL(DB_URL).pathname.replace("/", "") || "primexpc";
 
 const backupPath = process.argv[2];
 if (!backupPath || !existsSync(backupPath)) {
-  console.error("Usage: node scripts/restore-db.js <backup-folder>");
-  console.error("Example: node scripts/restore-db.js backups/primexpc_2026-06-29T10-00-00");
+  console.error("Usage: node scripts/restore-db.js <backup-folder OR backup-file.json>");
+  console.error("Example (folder):  node scripts/restore-db.js backups/primexpc_2026-06-29T10-00-00");
+  console.error("Example (file):    node scripts/restore-db.js primexpc-backup-2026-10-24-2330.json");
   process.exit(1);
+}
+
+// Builds [{ collectionName, docs }] from either the legacy per-collection
+// folder format or the single-file download from Admin → Settings → Backup.
+async function readBackup() {
+  const stat = await import("fs").then((fs) => fs.statSync(backupPath));
+  if (stat.isFile()) {
+    const data = JSON.parse(readFileSync(backupPath, "utf-8"));
+    if (!data.collections || typeof data.collections !== "object") {
+      throw new Error("Not a valid single-file backup (missing .collections)");
+    }
+    return Object.entries(data.collections).map(([collectionName, docs]) => ({ collectionName, docs }));
+  }
+  const files = readdirSync(backupPath).filter((f) => f.endsWith(".json"));
+  return files.map((file) => ({
+    collectionName: file.replace(".json", ""),
+    docs: JSON.parse(readFileSync(path.join(backupPath, file), "utf-8")),
+  }));
 }
 
 const restore = async () => {
@@ -19,22 +38,19 @@ const restore = async () => {
     await mongoose.connect(DB_URL);
     const db = mongoose.connection.db;
 
-    const files = readdirSync(backupPath).filter((f) => f.endsWith(".json"));
+    const entries = await readBackup();
     let totalDocs = 0;
 
-    for (const file of files) {
-      const collectionName = file.replace(".json", "");
-      const data = JSON.parse(readFileSync(path.join(backupPath, file), "utf-8"));
-
-      if (data.length > 0) {
+    for (const { collectionName, docs } of entries) {
+      if (Array.isArray(docs) && docs.length > 0) {
         await db.collection(collectionName).deleteMany({});
-        await db.collection(collectionName).insertMany(data);
-        totalDocs += data.length;
-        console.log(`   ✅ ${collectionName}: ${data.length} documents restored`);
+        await db.collection(collectionName).insertMany(docs);
+        totalDocs += docs.length;
+        console.log(`   ✅ ${collectionName}: ${docs.length} documents restored`);
       }
     }
 
-    console.log(`\n📦 Restore complete! ${files.length} collections, ${totalDocs} total documents`);
+    console.log(`\n📦 Restore complete! ${entries.length} collections, ${totalDocs} total documents`);
 
     await mongoose.connection.close();
     process.exit(0);
