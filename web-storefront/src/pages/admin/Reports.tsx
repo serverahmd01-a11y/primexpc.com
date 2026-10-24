@@ -74,7 +74,7 @@ const MONEY_COLS = ['Total', 'Revenue', 'Spend', 'Advance', 'Balance', 'Expected
 // ---------- page ----------
 
 const REPORT_TABS = [
-  { key: 'dues', label: 'Payment Dues — કોનું બાકી?', icon: AlertTriangle },
+  { key: 'dues', label: 'Payment Dues', icon: AlertTriangle },
   { key: 'money', label: 'Money In vs Pending', icon: IndianRupee },
   { key: 'stuck', label: 'Stuck Orders', icon: PauseCircle },
   { key: 'sales', label: 'Sales Summary', icon: BarChart3 },
@@ -143,7 +143,7 @@ export default function AdminReports() {
   const balanceOf = (o: AnyRec) => (Number(o.totalPrice) || 0) - (Number(o.codAdvanceAmount) || 0);
 
   const { stats, cols, rows, title } = useMemo(() => {
-    // ---- 1. PAYMENT DUES: કોનું payment બાકી છે ----
+    // ---- 1. PAYMENT DUES: whose payment is pending ----
     if (report === 'dues') {
       const totalDue = unpaidCodOrders.reduce((s, o) => s + balanceOf(o), 0);
       if (groupBy === 'customer') {
