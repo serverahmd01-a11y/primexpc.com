@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { protectRoute, adminOnly } from "../middleware/auth.middleware.js";
 import { NotifyChannel } from "../models/notifyChannel.model.js";
-import { NOTIFY_EVENTS, sendTestToChannelDoc } from "../config/notify.js";
+import { NOTIFY_EVENTS, EVENT_FIELDS, sendTestToChannelDoc } from "../config/notify.js";
 import { restartReportBot } from "../config/telegramReportBot.js";
 import { logger } from "../utils/logger.js";
 
@@ -18,6 +18,8 @@ function toSafe(ch) {
     enabled: ch.enabled,
     events: ch.events,
     interactive: ch.interactive || false,
+    dailySummaryTime: ch.dailySummaryTime || "21:30",
+    eventConfigs: (ch.eventConfigs || []).map((c) => ({ event: c.event, fields: c.fields || [], template: c.template || "" })),
     telegramToken: ch.telegramToken ? SECRET_MASK : "",
     telegramChat: ch.telegramChat,
     whatsappPhone: ch.whatsappPhone,
@@ -47,12 +49,27 @@ function applyBody(ch, body) {
   if (body.whatsappPhone !== undefined) ch.whatsappPhone = String(body.whatsappPhone).trim();
   if (body.whatsappApikey !== undefined && body.whatsappApikey !== SECRET_MASK) ch.whatsappApikey = String(body.whatsappApikey).trim();
   if (body.emailTo !== undefined) ch.emailTo = String(body.emailTo).trim();
+  if (body.dailySummaryTime !== undefined) {
+    const t = String(body.dailySummaryTime).trim();
+    ch.dailySummaryTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t : "21:30";
+  }
+  if (body.eventConfigs !== undefined) {
+    const validFields = (ev) => new Set((EVENT_FIELDS[ev] || []).map(([k]) => k));
+    const seen = new Set();
+    ch.eventConfigs = (Array.isArray(body.eventConfigs) ? body.eventConfigs : [])
+      .filter((c) => c && VALID_EVENTS.has(c.event) && !seen.has(c.event) && seen.add(c.event))
+      .map((c) => ({
+        event: c.event,
+        fields: (Array.isArray(c.fields) ? c.fields : []).filter((f) => validFields(c.event).has(f)),
+        template: String(c.template || "").slice(0, 2000),
+      }));
+  }
 }
 
 router.get("/", protectRoute, adminOnly, async (req, res) => {
   try {
     const channels = await NotifyChannel.find().sort({ createdAt: 1 });
-    res.status(200).json({ channels: channels.map(toSafe), events: NOTIFY_EVENTS });
+    res.status(200).json({ channels: channels.map(toSafe), events: NOTIFY_EVENTS, eventFields: EVENT_FIELDS });
   } catch (err) {
     res.status(500).json({ error: "Failed to load bots" });
   }

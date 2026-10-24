@@ -72,6 +72,13 @@ function writeLog(type, level, message, data) {
     if (process.env.NODE_ENV !== "production") {
       console.log(`[LOG:${level}] ${message}`, data || "");
     }
+    // ERROR/FATAL entries can be pushed to bots subscribed to "server_errors".
+    // Dynamic import avoids a circular dependency; failures are silent.
+    if (level === "ERROR" || level === "FATAL") {
+      import("../config/notify.js")
+        .then(({ dispatchErrorAlert }) => dispatchErrorAlert(level, message, data))
+        .catch(() => {});
+    }
   } catch (e) {
     console.error("Logger write error:", e.message);
   }

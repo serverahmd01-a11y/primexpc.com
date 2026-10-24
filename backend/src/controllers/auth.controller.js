@@ -76,7 +76,7 @@ export async function register(req, res) {
     logger.auth("SUCCESS", "New user registered", { userId: user._id.toString(), email: safeEmail, role, ip: reqIp(req) });
     dispatchNotification("new_user", {
       title: "👤 New Customer Registered",
-      lines: [`Name: ${safeName}`, `Email: ${safeEmail}`, `Time: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST`],
+      ctx: { name: safeName, email: safeEmail },
     });
 
     res.status(201).json({

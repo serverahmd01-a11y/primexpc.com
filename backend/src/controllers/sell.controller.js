@@ -5,6 +5,7 @@ import { SellBrand } from "../models/sellBrand.model.js";
 import { SellModel } from "../models/sellModel.model.js";
 import { sendEmail, sendSellNotification } from "../config/email.js";
 import { createPickupOrder, trackPickup, generatePickupLabel } from "../config/shiprocket.js";
+import { dispatchNotification } from "../config/notify.js";
 import crypto from "crypto";
 
 // Note: this flow intentionally has no OTP/SMS step — leads are submitted
@@ -99,6 +100,7 @@ export async function submitLead(req, res) {
     });
 
     await sendSellNotification(lead, "submission_received");
+    dispatchNotification("sell_lead_new", { title: "🔧 New Sell Request", ctx: { lead } });
 
     res.status(201).json({ message: "Lead submitted successfully", leadId: lead._id, lead });
   } catch (error) {
@@ -220,6 +222,7 @@ export async function updateLeadStatus(req, res) {
       return res.status(400).json({ message: `Cannot transition from ${lead.status} to ${status}` });
     }
 
+    const previousStatus = lead.status;
     lead.status = status;
     if (note) {
       lead.adminNotes.push({ text: note });
@@ -240,6 +243,7 @@ export async function updateLeadStatus(req, res) {
     if (notificationEvents[status]) {
       await sendSellNotification(lead, notificationEvents[status]);
     }
+    dispatchNotification("sell_lead_status", { title: "🔧 Sell Request Update", ctx: { lead, from: previousStatus, to: status, note } });
 
     res.status(200).json({ message: "Status updated", lead });
   } catch (error) {

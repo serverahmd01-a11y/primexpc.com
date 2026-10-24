@@ -228,7 +228,8 @@ async function dailySummary(bot) {
   const now = istNowString();
   const hhmm = `${now.hour}:${now.minute}`;
   const today = `${now.year}-${now.month}-${now.day}`;
-  if (hhmm !== "21:30") return;
+  const scheduledAt = bot.dailySummaryTime || "21:30";
+  if (hhmm !== scheduledAt) return;
   const lastSent = await getSetting("reportbot_last_daily", "");
   if (lastSent === today) return;
   await setSetting("reportbot_last_daily", today);

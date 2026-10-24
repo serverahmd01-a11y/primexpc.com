@@ -156,12 +156,7 @@ export async function updateProduct(req, res) {
     if (before.stock > LOW_STOCK_THRESHOLD && product.stock <= LOW_STOCK_THRESHOLD) {
       dispatchNotification("low_stock", {
         title: "⚠️ Low Stock Warning",
-        lines: [
-          `• ${product.name} — only ${product.stock} left`,
-          `Stock changed ${before.stock} → ${product.stock} during product edit`,
-          "",
-          "Restock soon to avoid missed sales.",
-        ],
+        ctx: { name: product.name, left: product.stock, before: before.stock },
       });
     }
   } catch (error) {
@@ -196,12 +191,7 @@ export async function updateProductStock(req, res) {
     if (before.stock > LOW_STOCK_THRESHOLD && stock <= LOW_STOCK_THRESHOLD) {
       dispatchNotification("low_stock", {
         title: "⚠️ Low Stock Warning",
-        lines: [
-          `• ${product.name} — only ${stock} left`,
-          `Stock changed ${before.stock} → ${stock} from admin panel`,
-          "",
-          "Restock soon to avoid missed sales.",
-        ],
+        ctx: { name: product.name, left: stock, before: before.stock },
       });
     }
   } catch (error) {
@@ -274,13 +264,13 @@ export async function updateOrderStatus(req, res) {
     res.status(200).json({ message: "Order status updated successfully", order });
     logger.admin("SUCCESS", "Order status updated", { ...actor(req), orderId, orderNumber: order.orderNumber, from: previousStatus, to: status });
     dispatchNotification("order_status", {
-      title: `🚚 Order #${order.orderNumber || orderId.slice(-6).toUpperCase()} → ${String(status).toUpperCase()}`,
-      lines: [
-        `Customer: ${order.shippingAddress?.fullName || "-"}`,
-        `Total: ₹${(order.totalPrice || 0).toLocaleString("en-IN")}`,
-        `Status: ${previousStatus} → ${status}`,
-        `Updated by: ${req.user?.email || "admin"}`,
-      ],
+      title: `🚚 Order Status Updated`,
+      ctx: {
+        orderNo: order.orderNumber || orderId.slice(-6).toUpperCase(),
+        customerName: order.shippingAddress?.fullName || "-",
+        total: order.totalPrice || 0,
+        from: previousStatus, to: status, by: req.user?.email || "admin",
+      },
     });
   } catch (error) {
     console.error("Error in updateOrderStatus controller:", error);

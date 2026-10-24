@@ -177,11 +177,9 @@ export async function finalizeDraftOrder(draft, paymentId, statusWord, source) {
   if (lowStock.length) {
     dispatchNotification("low_stock", {
       title: "⚠️ Low Stock Warning",
-      lines: [
-        ...lowStock.map((p) => `• ${p.name} — only ${p.left} left`),
-        "",
-        "Restock soon to avoid missed sales.",
-      ],
+      ctx: lowStock.map((p) => ({ name: p.name, left: p.left })).length
+        ? { name: lowStock.map((p) => p.name).join(", "), left: Math.min(...lowStock.map((p) => p.left)) }
+        : {},
     });
   }
 
@@ -457,14 +455,12 @@ export async function handleWebhook(req, res) {
         logger.order("ERROR", "Webhook: payment captured but NO draft order found - use admin Missed Orders tool to record it manually", logCtx);
         dispatchNotification("missed_payment", {
           title: "🚨 Payment received but NO order was created!",
-          lines: [
-            `Payment ID: ${payment.id}`,
-            `Razorpay Order: ${payment.order_id || "-"}`,
-            `Amount: ₹${((Number(payment.amount) || 0) / 100).toLocaleString("en-IN")}`,
-            `User: ${notes.email || notes.userId || "unknown"}`,
-            "",
-            "Action needed: Admin → Missed Orders → create the order manually.",
-          ],
+          ctx: {
+            paymentId: payment.id,
+            amount: `₹${((Number(payment.amount) || 0) / 100).toLocaleString("en-IN")}`,
+            user: notes.email || notes.userId || "unknown",
+            reason: "No draft order found — create it in Admin → Missed Orders",
+          },
         });
         return res.json({ received: true });
       }
@@ -485,13 +481,12 @@ export async function handleWebhook(req, res) {
         });
         dispatchNotification("missed_payment", {
           title: "🚨 Payment amount mismatch — order NOT created",
-          lines: [
-            `Payment ID: ${payment.id}`,
-            `Paid: ₹${(paidPaise / 100).toLocaleString("en-IN")} vs expected ₹${(expectedPaise / 100).toLocaleString("en-IN")}`,
-            `User: ${notes.email || notes.userId || "unknown"}`,
-            "",
-            "Action needed: check Admin → Logs and Missed Orders.",
-          ],
+          ctx: {
+            paymentId: payment.id,
+            amount: `paid ₹${(paidPaise / 100).toLocaleString("en-IN")} vs expected ₹${(expectedPaise / 100).toLocaleString("en-IN")}`,
+            user: notes.email || notes.userId || "unknown",
+            reason: "Check Admin → Logs and Missed Orders",
+          },
         });
         return res.json({ received: true });
       }

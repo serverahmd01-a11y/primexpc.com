@@ -101,13 +101,12 @@ router.post("/contact", async (req, res) => {
     const { dispatchNotification } = await import("../config/notify.js");
     dispatchNotification("contact_form", {
       title: "📩 New Contact Form Message",
-      lines: [
-        `From: ${String(name).replace(/[<>"'&]/g, "")}`,
-        `Email: ${String(email).replace(/[<>"'&]/g, "")}`,
-        `Subject: ${String(subject || "-").replace(/[<>"'&]/g, "")}`,
-        "",
-        String(message).replace(/[<>"'&]/g, "").slice(0, 500),
-      ],
+      ctx: {
+        name: String(name).replace(/[<>"'&]/g, ""),
+        email: String(email).replace(/[<>"'&]/g, ""),
+        subject: String(subject || "-").replace(/[<>"'&]/g, ""),
+        message: String(message).replace(/[<>"'&]/g, "").slice(0, 500),
+      },
     });
     await sendEmail({
       to: storeEmail,
