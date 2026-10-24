@@ -87,16 +87,25 @@ async function deliver(ch, text, ctx) {
  * payload: { title, lines: string[] }
  */
 export async function dispatchNotification(event, payload) {
+  return dispatchNotificationAny([event], payload);
+}
+
+/**
+ * Fire at every bot subscribed to ANY of the given events — each bot gets the
+ * message exactly once, even if it subscribes to several of them (so a bot
+ * with both "new_order" and "new_order_prepaid" is not messaged twice).
+ */
+export async function dispatchNotificationAny(events, payload) {
   try {
-    const channels = await NotifyChannel.find({ enabled: true, events: event });
+    const channels = await NotifyChannel.find({ enabled: true, events: { $in: events } });
     if (channels.length === 0) return;
     const text = [payload.title, "", ...payload.lines].filter((l) => l !== undefined).join("\n");
-    const ctx = { event };
+    const ctx = { event: events.join("+") };
     for (const ch of channels) {
       deliver(ch, text, ctx); // async, not awaited — never blocks the flow
     }
   } catch (e) {
-    logger.order("ERROR", "Notification dispatch crashed", { event, error: e.message });
+    logger.order("ERROR", "Notification dispatch crashed", { event: events.join("+"), error: e.message });
   }
 }
 
@@ -128,11 +137,10 @@ export function buildOrderMessage(order, user) {
 export async function sendOrderNotification(order, user, source = "unknown") {
   const lines = buildOrderMessage(order, user);
   const payload = { title: lines[0], lines: lines.slice(1) };
-  // Fire at the generic event AND the payment-type-specific event so a bot
-  // can listen to "everything", "only prepaid" or "only COD".
+  // One delivery per bot: a bot subscribed to the generic event AND the
+  // payment-type event still receives this order exactly once.
   const specific = order.paymentResult?.status === "cod_advance" ? "new_order_cod" : "new_order_prepaid";
-  await dispatchNotification("new_order", payload);
-  await dispatchNotification(specific, payload);
+  await dispatchNotificationAny(["new_order", specific], payload);
   logger.order("INFO", "Order notification dispatched to bots", {
     orderId: order?._id?.toString(),
     orderNumber: order?.orderNumber,
