@@ -41,6 +41,7 @@ import AdminLogs from '@/pages/admin/Logs';
 import AdminHelp from '@/pages/admin/AdminHelp';
 import AdminStock from '@/pages/admin/Stock';
 import AdminBots from '@/pages/admin/Bots';
+import AdminReports from '@/pages/admin/Reports';
 import { pageView } from '@/lib/analytics';
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -98,6 +99,7 @@ function AppRoutes() {
         <Route path="sell/products" element={<AdminOnly><AdminSellProducts /></AdminOnly>} />
         <Route path="logs" element={<AdminOnly><AdminLogs /></AdminOnly>} />
         <Route path="bots" element={<AdminOnly><AdminBots /></AdminOnly>} />
+        <Route path="reports" element={<AdminOnly><AdminReports /></AdminOnly>} />
         <Route path="help" element={<AdminHelp />} />
       </Route>
       <Route path="*" element={<NotFound />} />
