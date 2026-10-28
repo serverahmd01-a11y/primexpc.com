@@ -16,6 +16,8 @@ import {
   updateOrderTracking,
   getMissedOrders,
   createMissedOrder,
+  getStuckDrafts,
+  finalizeStuckDraft,
   updateProductStock,
 } from "../controllers/admin.controller.js";
 import { updateCustomer, createCustomer, getOrderStats } from "../controllers/admin.controller.js";
@@ -43,6 +45,8 @@ router.patch("/orders/:orderId/tracking", orderActionsOnly, updateOrderTracking)
 
 router.get("/missed-orders", getMissedOrders);
 router.post("/missed-orders", adminOnly, createMissedOrder);
+router.get("/missed-orders/stuck-drafts", adminOnly, getStuckDrafts);
+router.post("/missed-orders/:draftId/finalize", adminOnly, finalizeStuckDraft);
 
 router.get("/customers", adminOnly, getAllCustomers);
 router.get("/customers/:customerId", adminOnly, getCustomerDetail);

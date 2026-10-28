@@ -117,6 +117,9 @@ export const adminApi = {
   getMissedOrders: () => api.get('/admin/missed-orders').then((r) => r.data),
   createMissedOrder: (data: unknown) =>
     api.post('/admin/missed-orders', data).then((r) => r.data),
+  getStuckDrafts: () => api.get('/admin/missed-orders/stuck-drafts').then((r) => r.data),
+  finalizeStuckDraft: (draftId: string, razorpayPaymentId: string) =>
+    api.post(`/admin/missed-orders/${draftId}/finalize`, { razorpayPaymentId }).then((r) => r.data),
   getLogFiles: () => api.get('/admin/logs/files').then((r) => r.data),
   getLogs: (type: string, date?: string) =>
     api.get('/admin/logs', { params: { type, date } }).then((r) => r.data),

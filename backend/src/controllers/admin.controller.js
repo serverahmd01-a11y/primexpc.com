@@ -8,6 +8,7 @@ import { User } from "../models/user.model.js";
 import { sendOrderDelivered } from "../config/email.js";
 import { generateOrderNumber } from "../utils/order.util.js";
 import { sendOrderNotification, dispatchNotification, LOW_STOCK_THRESHOLD } from "../config/notify.js";
+import { finalizeDraftOrder } from "./payment.controller.js";
 import { logger } from "../utils/logger.js";
 
 function actor(req) {
@@ -601,6 +602,60 @@ export async function getMissedOrders(_, res) {
   } catch (error) {
     console.error("Error in getMissedOrders:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+/**
+ * Drafts that never got confirmed — customer most likely paid (check Razorpay)
+ * but neither the browser callback nor the webhook finalized the order.
+ * Shown on the Missed Orders page with a one-click Finalize.
+ */
+export async function getStuckDrafts(req, res) {
+  try {
+    const cutoff = new Date(Date.now() - 10 * 60 * 1000); // ignore in-flight checkouts
+    const drafts = await Order.find({ isDraft: true, createdAt: { $lt: cutoff } })
+      .populate("user", "name email")
+      .sort({ createdAt: -1 })
+      .limit(100);
+    res.status(200).json({ drafts });
+  } catch (error) {
+    console.error("Error in getStuckDrafts:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+export async function finalizeStuckDraft(req, res) {
+  try {
+    const { razorpayPaymentId } = req.body;
+    const draft = await Order.findById(req.params.draftId);
+    if (!draft) return res.status(404).json({ error: "Draft not found" });
+    if (!draft.isDraft) return res.status(400).json({ error: "This order is already finalized" });
+
+    const paymentId = String(razorpayPaymentId || "").trim() ||
+      `admin_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+    const order = await finalizeDraftOrder(
+      draft,
+      paymentId,
+      draft.paymentType === "cod" ? "cod_advance" : "captured",
+      "admin-finalize"
+    );
+
+    logger.admin("SUCCESS", "Stuck draft finalized manually", {
+      ...actor(req),
+      orderId: order?._id?.toString(),
+      orderNumber: order?.orderNumber,
+      draftId: draft._id?.toString(),
+      razorpayOrderId: draft.razorpayOrderId,
+      paymentId,
+      paymentType: draft.paymentType,
+      total: draft.totalPrice,
+    });
+
+    res.status(200).json({ message: "Order finalized", order });
+  } catch (error) {
+    console.error("Error in finalizeStuckDraft:", error);
+    res.status(500).json({ error: error.message || "Failed to finalize draft" });
   }
 }
 

@@ -3,12 +3,18 @@ import { Link } from 'react-router-dom';
 import { adminApi } from '@/lib/api';
 import { formatINR } from '@/lib/cart';
 import { formatOrderNo } from '@/lib/utils';
-import { Plus, Trash2, Save, PackagePlus, Loader2, Banknote, CreditCard, Search, PackageX, Check } from 'lucide-react';
+import { Plus, Trash2, Save, PackagePlus, Loader2, Banknote, CreditCard, Search, PackageX, Check, AlertTriangle, Zap } from 'lucide-react';
 import Pagination, { paginate, sortNewestFirst } from './Pagination';
 
 type SelectedItem = { productId: string; quantity: number };
 type Address = { fullName: string; streetAddress: string; city: string; state: string; zipCode: string; phoneNumber: string };
 type SearchableOption = { value: string; label: string };
+type StuckDraft = {
+  _id: string; createdAt: string; totalPrice: number; codAdvanceAmount: number;
+  paymentType?: string; razorpayOrderId?: string;
+  user?: { name?: string; email?: string };
+  orderItems?: unknown[];
+};
 
 const emptyAddress: Address = { fullName: '', streetAddress: '', city: '', state: '', zipCode: '', phoneNumber: '' };
 
@@ -95,6 +101,10 @@ export default function AdminMissedOrders() {
   const [stockEdits, setStockEdits] = useState<Record<string, string>>({});
   const [savingStock, setSavingStock] = useState<string | null>(null);
   const [stockMsg, setStockMsg] = useState<string | null>(null);
+  const [stuckDrafts, setStuckDrafts] = useState<StuckDraft[]>([]);
+  const [draftPayIds, setDraftPayIds] = useState<Record<string, string>>({});
+  const [finalizing, setFinalizing] = useState<string | null>(null);
+  const [draftMsg, setDraftMsg] = useState<{ id: string; ok: boolean; text: string } | null>(null);
 
   const userOptions = useMemo<SearchableOption[]>(
     () => customers.map((c) => ({ value: String(c._id), label: `${String(c.name)} — ${String(c.email)}` })),
@@ -106,11 +116,12 @@ export default function AdminMissedOrders() {
   );
 
   const load = () => {
-    Promise.all([adminApi.getCustomers(), adminApi.getProducts(), adminApi.getMissedOrders()])
-      .then(([c, p, m]) => {
+    Promise.all([adminApi.getCustomers(), adminApi.getProducts(), adminApi.getMissedOrders(), adminApi.getStuckDrafts()])
+      .then(([c, p, m, s]) => {
         setCustomers(c.customers || []);
         setProducts(p || []);
         setMissedOrders(m.orders || []);
+        setStuckDrafts(s.drafts || []);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -187,8 +198,93 @@ export default function AdminMissedOrders() {
     }
   };
 
+  const finalizeDraft = async (draft: StuckDraft) => {
+    setFinalizing(draft._id);
+    setDraftMsg(null);
+    try {
+      const res = await adminApi.finalizeStuckDraft(draft._id, (draftPayIds[draft._id] || '').trim());
+      const num = (res.order as Record<string, unknown>)?.orderNumber;
+      setDraftMsg({ id: draft._id, ok: true, text: `Finalized as order ${formatOrderNo(num) || ''} — it now shows for the user and in Orders.` });
+      load();
+    } catch (err: unknown) {
+      setDraftMsg({ id: draft._id, ok: false, text: (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Finalize failed' });
+    } finally {
+      setFinalizing(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            <h2 className="font-display text-lg font-black uppercase tracking-wider">Stuck Drafts ({stuckDrafts.length})</h2>
+          </div>
+          <p className="text-[11px] text-muted-foreground">Checkouts older than 10 min that never got confirmed. If the customer paid (check Razorpay), finalize here.</p>
+        </div>
+        {draftMsg && <div className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${draftMsg.ok ? 'border-primary/40 bg-primary/10 text-primary' : 'border-destructive/40 bg-destructive/10 text-destructive'}`}>{draftMsg.text}</div>}
+        {stuckDrafts.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No stuck drafts — everything is confirmed.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-2.5">Date</th>
+                  <th className="px-4 py-2.5">Customer</th>
+                  <th className="px-4 py-2.5">Items</th>
+                  <th className="px-4 py-2.5">Total</th>
+                  <th className="px-4 py-2.5">Advance</th>
+                  <th className="px-4 py-2.5">Type</th>
+                  <th className="px-4 py-2.5">Razorpay Order ID</th>
+                  <th className="px-4 py-2.5">Payment ID (optional)</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {stuckDrafts.map((dr) => (
+                  <tr key={dr._id} className="border-b border-border">
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{new Date(dr.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="font-semibold">{String(dr.user?.name || 'N/A')}</div>
+                      <div className="text-xs text-muted-foreground">{String(dr.user?.email || '')}</div>
+                    </td>
+                    <td className="px-4 py-2.5">{String(dr.orderItems?.length || 0)}</td>
+                    <td className="px-4 py-2.5 font-bold text-primary">{formatINR(Number(dr.totalPrice) || 0)}</td>
+                    <td className="px-4 py-2.5 font-bold">{Number(dr.codAdvanceAmount) ? formatINR(Number(dr.codAdvanceAmount)) : '-'}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`inline-flex rounded px-2 py-0.5 text-xs font-bold ${dr.paymentType === 'cod' ? 'bg-amber-500/15 text-amber-600' : 'bg-blue-500/15 text-blue-400'}`}>
+                        {dr.paymentType === 'cod' ? 'COD' : 'Prepaid'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 font-mono text-xs">{dr.razorpayOrderId || '-'}</td>
+                    <td className="px-4 py-2.5">
+                      <input
+                        type="text"
+                        value={draftPayIds[dr._id] ?? ''}
+                        onChange={(e) => setDraftPayIds((prev) => ({ ...prev, [dr._id]: e.target.value }))}
+                        placeholder="pay_... from Razorpay"
+                        className="h-9 w-44 rounded-lg border border-border bg-input px-2 font-mono text-xs text-foreground outline-none focus:border-primary"
+                      />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <button
+                        onClick={() => finalizeDraft(dr)}
+                        disabled={finalizing === dr._id}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-amber-500 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-white hover:brightness-110 disabled:opacity-60"
+                      >
+                        {finalizing === dr._id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />} Finalize
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center gap-2">
           <PackagePlus className="h-5 w-5 text-primary" />
