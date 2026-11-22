@@ -28,6 +28,7 @@ const LOG_TYPES = [
   { key: 'payment', label: 'Payments', desc: 'Razorpay transactions, webhooks' },
   { key: 'auth', label: 'Auth', desc: 'Login, register, password resets' },
   { key: 'admin', label: 'Admin Actions', desc: 'Product/order/customer changes by staff' },
+  { key: 'upload', label: 'Uploads', desc: 'Every photo/video upload: saved name, full folder path, size, deletes' },
   { key: 'error', label: 'Server Errors', desc: 'Unhandled server errors, crashes' },
 ];
 
@@ -36,6 +37,7 @@ const TYPE_CHIP: Record<string, string> = {
   payment: 'bg-blue-500/15 text-blue-400',
   auth: 'bg-purple-500/15 text-purple-400',
   admin: 'bg-amber-500/15 text-amber-400',
+  upload: 'bg-cyan-500/15 text-cyan-400',
   error: 'bg-red-500/15 text-red-400',
 };
 

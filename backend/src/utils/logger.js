@@ -1,18 +1,25 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+
+dotenv.config({ quiet: true });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const LOG_DIR = path.join(__dirname, "..", "..", "logs");
+// LOGS_DIR lets production keep logs in a persistent folder outside the
+// deploy/build directory (which is replaced on every redeploy).
+export const LOG_DIR = process.env.LOGS_DIR
+  ? path.resolve(process.env.LOGS_DIR)
+  : path.join(__dirname, "..", "..", "logs");
 
 if (!fs.existsSync(LOG_DIR)) {
   fs.mkdirSync(LOG_DIR, { recursive: true });
 }
 
-const VALID_LOG_TYPES = new Set(["order", "payment", "auth", "error", "admin"]);
+const VALID_LOG_TYPES = new Set(["order", "payment", "auth", "error", "admin", "upload"]);
 // Ordered for the admin Logs page "All types" merged timeline.
-export const LOG_TYPES = ["order", "payment", "auth", "admin", "error"];
+export const LOG_TYPES = ["order", "payment", "auth", "admin", "upload", "error"];
 
 // All log timestamps and file names use IST (Asia/Kolkata) so the admin panel
 // shows the same clock the shop runs on — UTC naming made late-night entries
@@ -90,6 +97,7 @@ export const logger = {
   auth: (level, message, data) => writeLog("auth", level, message, data),
   error: (level, message, data) => writeLog("error", level, message, data),
   admin: (level, message, data) => writeLog("admin", level, message, data),
+  upload: (level, message, data) => writeLog("upload", level, message, data),
 };
 
 export function getLogs(type, date) {

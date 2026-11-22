@@ -38,6 +38,7 @@ import AdminSellLeads from '@/pages/admin/SellLeads';
 import AdminSellLeadDetail from '@/pages/admin/SellLeadDetail';
 import AdminSellProducts from '@/pages/admin/SellProducts';
 import AdminLogs from '@/pages/admin/Logs';
+import AdminUploads from '@/pages/admin/Uploads';
 import AdminHelp from '@/pages/admin/AdminHelp';
 import AdminStock from '@/pages/admin/Stock';
 import AdminBots from '@/pages/admin/Bots';
@@ -98,6 +99,7 @@ function AppRoutes() {
         <Route path="sell/leads/:leadId" element={<AdminSellLeadDetail />} />
         <Route path="sell/products" element={<AdminOnly><AdminSellProducts /></AdminOnly>} />
         <Route path="logs" element={<AdminOnly><AdminLogs /></AdminOnly>} />
+        <Route path="uploads" element={<AdminOnly><AdminUploads /></AdminOnly>} />
         <Route path="bots" element={<AdminOnly><AdminBots /></AdminOnly>} />
         <Route path="reports" element={<AdminOnly><AdminReports /></AdminOnly>} />
         <Route path="help" element={<AdminHelp />} />

@@ -10,6 +10,7 @@ import { generateOrderNumber } from "../utils/order.util.js";
 import { sendOrderNotification, dispatchNotification, LOW_STOCK_THRESHOLD } from "../config/notify.js";
 import { finalizeDraftOrder } from "./payment.controller.js";
 import { logger } from "../utils/logger.js";
+import { ENV } from "../config/env.js";
 
 function actor(req) {
   return { actorId: req.user?._id?.toString(), actor: req.user?.email || "unknown" };
@@ -18,7 +19,8 @@ function actor(req) {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const uploadsDir = path.join(process.cwd(), "uploads");
+// Must match multer's destination (UPLOADS_DIR), otherwise deletes look in the wrong folder.
+const uploadsDir = ENV.UPLOADS_DIR;
 
 function getImageUrl(filename) {
   return `/uploads/${filename}`;
@@ -39,9 +41,13 @@ function deleteImageFile(filename) {
     if (!resolved.startsWith(path.resolve(uploadsDir))) return;
     if (fs.existsSync(filepath)) {
       fs.unlinkSync(filepath);
+      logger.upload("INFO", "File deleted", { file: safeName, fullPath: filepath });
+    } else {
+      logger.upload("WARN", "Delete skipped - file not found on disk", { file: safeName, fullPath: filepath });
     }
   } catch (err) {
     console.error("Error deleting file:", err.message);
+    logger.upload("ERROR", "File delete failed", { file: filename, error: err.message });
   }
 }
 

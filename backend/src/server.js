@@ -40,7 +40,9 @@ import { startReportBot } from "./config/telegramReportBot.js";
 import { handleShiprocketWebhook } from "./controllers/sell.controller.js";
 import { getSitemap } from "./controllers/sitemap.controller.js";
 import { protectRoute, adminOnly } from "./middleware/auth.middleware.js";
-import { getLogs, getAvailableLogFiles, getLogFilePath, istDateString, LOG_TYPES } from "./utils/logger.js";
+import { getLogs, getAvailableLogFiles, getLogFilePath, istDateString, LOG_TYPES, LOG_DIR } from "./utils/logger.js";
+import { Product } from "./models/product.model.js";
+import { Category } from "./models/category.model.js";
 
 const app = express();
 
@@ -163,6 +165,101 @@ app.get("/api/admin/logs/download", protectRoute, adminOnly, (req, res) => {
   }
 });
 
+// Upload diagnostics: which folder the app saves to, whether it is writable,
+// latest files on disk, stray "uploads" folders elsewhere, and DB image
+// references whose file is missing on disk.
+app.get("/api/admin/uploads/status", protectRoute, adminOnly, async (req, res) => {
+  const dir = ENV.UPLOADS_DIR;
+  const result = {
+    envValue: process.env.UPLOADS_DIR || null,
+    folder: dir,
+    cwd: process.cwd(),
+    logsFolder: LOG_DIR,
+    exists: false,
+    writable: false,
+    error: null,
+    totalFiles: 0,
+    totalSizeMB: 0,
+    recent: [],
+    otherFolders: [],
+    db: null,
+  };
+  let onDisk = new Set();
+  try {
+    result.exists = fs.existsSync(dir);
+    if (result.exists) {
+      const probe = path.join(dir, ".write-test");
+      try {
+        fs.writeFileSync(probe, "ok");
+        fs.unlinkSync(probe);
+        result.writable = true;
+      } catch (e) {
+        result.error = e.message;
+      }
+      const files = [];
+      for (const name of fs.readdirSync(dir)) {
+        try {
+          const st = fs.statSync(path.join(dir, name));
+          if (!st.isFile()) continue;
+          files.push({ name, size: st.size, mtime: st.mtimeMs });
+        } catch { /* skip */ }
+      }
+      onDisk = new Set(files.map((f) => f.name));
+      result.totalFiles = files.length;
+      result.totalSizeMB = +(files.reduce((a, f) => a + f.size, 0) / 1048576).toFixed(2);
+      result.recent = files
+        .sort((a, b) => b.mtime - a.mtime)
+        .slice(0, 30)
+        .map((f) => ({
+          name: f.name,
+          sizeKB: Math.round(f.size / 1024),
+          modified: new Date(f.mtime).toISOString(),
+          url: `/uploads/${f.name}`,
+        }));
+    }
+  } catch (e) {
+    result.error = e.message;
+  }
+
+  const candidates = [
+    path.join(process.cwd(), "uploads"),
+    path.join(__dirname, "..", "uploads"),
+  ];
+  for (const c of [...new Set(candidates.map((p) => path.resolve(p)))]) {
+    if (c === path.resolve(dir)) continue;
+    try {
+      if (fs.existsSync(c)) {
+        result.otherFolders.push({ folder: c, files: fs.readdirSync(c).length });
+      }
+    } catch { /* skip */ }
+  }
+
+  try {
+    const refs = [];
+    const products = await Product.find({}, { name: 1, images: 1, video: 1 }).lean();
+    for (const p of products) {
+      for (const img of [...(p.images || []), p.video].filter(Boolean)) {
+        refs.push({ where: `Product: ${p.name}`, url: img });
+      }
+    }
+    const cats = await Category.find({}, { name: 1, image: 1 }).lean();
+    for (const c of cats) if (c.image) refs.push({ where: `Category: ${c.name}`, url: c.image });
+    const local = refs.filter((r) => typeof r.url === "string" && r.url.includes("/uploads/"));
+    const missing = local.filter((r) => !onDisk.has(path.basename(r.url.split("/uploads/")[1] || "")));
+    result.db = {
+      totalRefs: refs.length,
+      localRefs: local.length,
+      externalRefs: refs.length - local.length,
+      missingCount: missing.length,
+      missing: missing.slice(0, 100),
+    };
+  } catch (e) {
+    result.db = { error: e.message };
+  }
+
+  res.json(result);
+});
+
 // Normalize "2026-10-24T17:12:06.379Z" (legacy UTC lines) and
 // "2026-10-24 23:11:35 IST" into one comparable IST-based key.
 function logTsKey(ts) {
@@ -240,7 +337,31 @@ if (ENV.NODE_ENV === "production") {
   }
 }
 
+const checkUploadsDir = () => {
+  const info = {
+    envValue: process.env.UPLOADS_DIR || "(not set - using default)",
+    folder: ENV.UPLOADS_DIR,
+    cwd: process.cwd(),
+    logsFolder: LOG_DIR,
+  };
+  console.log("UPLOADS_DIR env value:", info.envValue);
+  console.log("Uploads folder in use:", info.folder);
+  try {
+    fs.mkdirSync(ENV.UPLOADS_DIR, { recursive: true });
+    const probe = path.join(ENV.UPLOADS_DIR, ".write-test");
+    fs.writeFileSync(probe, "ok");
+    fs.unlinkSync(probe);
+    const count = fs.readdirSync(ENV.UPLOADS_DIR).length;
+    console.log("Uploads folder is writable:", count, "files inside");
+    logger.upload("SUCCESS", "Server started - uploads folder OK", { ...info, writable: true, files: count });
+  } catch (err) {
+    console.error("Uploads folder NOT writable:", ENV.UPLOADS_DIR, err.message);
+    logger.upload("ERROR", "Server started - uploads folder NOT writable", { ...info, writable: false, error: err.message });
+  }
+};
+
 const startServer = async () => {
+  checkUploadsDir();
   await connectDB();
   startReportBot();
   app.listen(ENV.PORT, () => {

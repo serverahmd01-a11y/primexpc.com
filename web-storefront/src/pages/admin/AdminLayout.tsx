@@ -3,7 +3,7 @@ import { useAuth } from '@/lib/auth';
 import {
   LayoutDashboard, Package, ClipboardList, Users, LogOut, ShoppingBag, Settings, Percent, Tag,
   Menu, X, FileText, Coins, PackagePlus, FileSpreadsheet, ScrollText, HelpCircle, Boxes,
-  BarChart3, ChevronDown,
+  BarChart3, ChevronDown, ImageUp,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -56,6 +56,7 @@ const GROUPS: NavGroup[] = [
       { path: '/admin/settings', label: 'Settings', icon: Settings },
       { path: '/admin/bots', label: 'Bots', icon: Coins },
       { path: '/admin/logs', label: 'Logs', icon: ScrollText },
+      { path: '/admin/uploads', label: 'Uploads Check', icon: ImageUp },
       { path: '/admin/help', label: 'Help', icon: HelpCircle },
     ],
   },
