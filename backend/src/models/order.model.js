@@ -34,6 +34,14 @@ const orderItemSchema = new mongoose.Schema({
     enum: ["old", "new"],
     default: "old",
   },
+  fastDelivery: {
+    type: Boolean,
+    default: false,
+  },
+  fastDeliveryFee: {
+    type: Number,
+    default: 0,
+  },
   margin: {
     type: Number,
     default: 0,

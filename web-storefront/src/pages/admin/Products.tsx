@@ -48,6 +48,7 @@ export default function AdminProducts() {
   const [pricingMode, setPricingMode] = useState<'old' | 'new'>('old');
   const [margin, setMargin] = useState('');
   const [shippingCost, setShippingCost] = useState('');
+  const [fastPrice, setFastPrice] = useState('');
   const [productCondition, setProductCondition] = useState('new');
   const [specifications, setSpecifications] = useState<{ name: string; value: string }[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
@@ -95,6 +96,7 @@ export default function AdminProducts() {
     setDealEndsAt(p.dealEndsAt ? toIstDateTimeLocal(p.dealEndsAt) : '');
     setGstRate(String(p.gstRate || 18)); setProductCondition(p.condition || 'new');
     setPricingMode(p.pricingMode === 'new' ? 'new' : 'old');
+    setFastPrice(String(p.fastDeliveryPrice || ''));
     setMargin(String(p.margin || '')); setShippingCost(String(p.shippingCost || ''));
     setSpecifications(p.specifications || []);
     setMsg(null); setShowModal(true);
@@ -124,6 +126,7 @@ export default function AdminProducts() {
       if (dealEndsAt) fd.append('dealEndsAt', new Date(`${dealEndsAt}:00+05:30`).toISOString());
       fd.append('gstRate', gstRate || '18');
       fd.append('pricingMode', pricingMode);
+      fd.append('fastDeliveryPrice', fastPrice || '0');
       fd.append('margin', margin || '0');
       fd.append('shippingCost', shippingCost || '0');
       fd.append('condition', productCondition || 'new');
@@ -298,6 +301,10 @@ export default function AdminProducts() {
                   <option value="18">18%</option>
                   <option value="28">28%</option>
                 </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Fast delivery price ₹ (0 = not offered)</label>
+                <input type="number" min="0" value={fastPrice} onChange={(e) => setFastPrice(e.target.value)} className="mt-1 h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none focus:border-primary" />
               </div>
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pricing mode</label>

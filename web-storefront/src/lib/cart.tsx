@@ -29,6 +29,7 @@ type CartCtx = {
   setQty: (slug: string, qty: number) => void;
   clear: () => void;
   refreshPrices: () => Promise<number | void>;
+  setItemFastDelivery: (slug: string, v: boolean) => void;
 };
 
 const Ctx = createContext<CartCtx | null>(null);
@@ -82,9 +83,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
       margin: Number(item.product?.margin) || 0,
       shippingCost: Number(item.product?.shippingCost) || 0,
       pricingMode: (item.product?.pricingMode === 'new' ? 'new' : 'old') as 'old' | 'new',
+      fastDeliveryPrice: Number(item.product?.fastDeliveryPrice) || 0,
       image: item.product?.images?.[0] || '',
     };
   };
+
+  const setItemFastDelivery = useCallback((slug: string, v: boolean) => {
+    setItems((prev) => prev.map((i) => (i.slug === slug ? { ...i, fastDelivery: v } : i)));
+  }, []);
 
   const applyFreshPrices = useCallback((products: any[]): number | void => {
     if (!Array.isArray(products) || products.length === 0) return;
@@ -106,6 +112,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         margin: Number(p.margin) || 0,
         shippingCost: Number(p.shippingCost) || 0,
         pricingMode: (p.pricingMode === 'new' ? 'new' : 'old') as 'old' | 'new',
+        fastDeliveryPrice: Number(p.fastDeliveryPrice) || 0,
         image: p.images?.[0] || i.image,
       };
     });
@@ -184,6 +191,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
           margin: Number(p.margin) || 0,
           shippingCost: Number(p.shippingCost) || 0,
           pricingMode: (p.pricingMode === 'new' ? 'new' : 'old') as 'old' | 'new',
+          fastDeliveryPrice: Number(p.fastDeliveryPrice) || 0,
+          fastDelivery: false,
           image: p.images?.[0] || '',
         }];
     itemsRef.current = next;
@@ -239,9 +248,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       items, count, subtotal, isOpen,
       open: () => { refreshPrices(); setOpen(true); },
       close: () => setOpen(false),
-      add, remove, setQty, clear, refreshPrices,
+      add, remove, setQty, clear, refreshPrices, setItemFastDelivery,
     };
-  }, [items, isOpen, add, remove, setQty, clear, refreshPrices]);
+  }, [items, isOpen, add, remove, setQty, clear, refreshPrices, setItemFastDelivery]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

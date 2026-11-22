@@ -9,7 +9,6 @@ import { User } from "../models/user.model.js";
 import { generateOrderNumber } from "../utils/order.util.js";
 import { sendOrderNotification, dispatchNotification, LOW_STOCK_THRESHOLD } from "../config/notify.js";
 import { logger } from "../utils/logger.js";
-import { FAST_DELIVERY_FEE, FAST_DELIVERY_MIN_PRICE } from "../utils/pricing.util.js";
 
 async function getRazorpayInstance() {
   const keys = await getRazorpayKeys();
@@ -42,7 +41,7 @@ function expectedChargePaise(draft) {
  * Every rejection is logged with the user + reason so admin can see exactly
  * which user hit which problem.
  */
-async function buildValidatedItems(rawItems, user, fastDelivery = false) {
+async function buildValidatedItems(rawItems, user) {
   const logCtx = { userId: user._id?.toString(), email: user.email };
 
   if (!Array.isArray(rawItems) || rawItems.length === 0) {
@@ -103,6 +102,8 @@ async function buildValidatedItems(rawItems, user, fastDelivery = false) {
       condition: product.condition || "new",
       gstRate: product.gstRate || 18,
       pricingMode: product.pricingMode === "new" ? "new" : "old",
+      fastDelivery: !!raw.fastDelivery && Number(product.fastDeliveryPrice) > 0,
+      fastDeliveryFee: raw.fastDelivery && Number(product.fastDeliveryPrice) > 0 ? Number(product.fastDeliveryPrice) * quantity : 0,
       margin: Number(product.margin) || 0,
       shippingCost: Number(product.shippingCost) || 0,
       image: product.images?.[0] || "",
@@ -111,10 +112,7 @@ async function buildValidatedItems(rawItems, user, fastDelivery = false) {
 
   // Fast delivery: only in "new" pricing mode, only when the cart has an item
   // priced above the threshold, and only if the customer ticked the option.
-  const fastDeliveryFee =
-    fastDelivery && items.some((i) => i.pricingMode === "new" && i.price > FAST_DELIVERY_MIN_PRICE)
-      ? FAST_DELIVERY_FEE
-      : 0;
+  const fastDeliveryFee = items.reduce((s, i) => s + (i.fastDeliveryFee || 0), 0);
 
   return { items, subtotal, fastDeliveryFee };
 }
@@ -259,7 +257,7 @@ export async function createRazorpayOrder(req, res) {
       return res.status(400).json({ error: `Shipping address incomplete: ${missingAddr.join(", ")}` });
     }
 
-    const { items: validatedItems, subtotal, fastDeliveryFee, error } = await buildValidatedItems(items, user, !!req.body.fastDelivery);
+    const { items: validatedItems, subtotal, fastDeliveryFee, error } = await buildValidatedItems(items, user);
     if (error) {
       return res.status(400).json({ error });
     }

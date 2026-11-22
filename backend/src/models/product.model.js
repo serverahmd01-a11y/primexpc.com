@@ -80,6 +80,12 @@ const productSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Fast delivery price for this product (0 = fast delivery not offered).
+    fastDeliveryPrice: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     condition: {
       type: String,
       enum: ["new", "refurbished"],

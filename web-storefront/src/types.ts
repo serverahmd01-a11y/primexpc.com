@@ -18,6 +18,7 @@ export type Product = {
   pricingMode?: 'old' | 'new';
   margin?: number;
   shippingCost?: number;
+  fastDeliveryPrice?: number;
   specifications?: { name: string; value: string }[];
   createdAt?: string;
 };
@@ -35,6 +36,8 @@ export type CartItem = {
   margin?: number;
   shippingCost?: number;
   pricingMode?: 'old' | 'new';
+  fastDelivery?: boolean;
+  fastDeliveryPrice?: number;
 };
 
 export type User = {

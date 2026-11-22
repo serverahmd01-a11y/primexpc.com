@@ -2,15 +2,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Minus, Plus, Trash2, ArrowRight, ShoppingCart, ShieldCheck, Truck, Cpu } from 'lucide-react';
 import { useCart, formatINR } from '@/lib/cart';
 import { getImageUrl } from '@/lib/utils';
-import { useFastDelivery, FAST_DELIVERY_FEE, FAST_DELIVERY_MIN_PRICE } from '@/lib/pricing';
 
 export default function CartPage() {
-  const { items, count, subtotal, setQty, remove } = useCart();
+  const { items, count, subtotal, setQty, remove, setItemFastDelivery } = useCart();
   const navigate = useNavigate();
 
-  const fastEligible = items.some((i) => i.pricingMode === 'new' && i.price > FAST_DELIVERY_MIN_PRICE);
-  const [fastDelivery, setFastDelivery] = useFastDelivery();
-  const fastFee = fastEligible && fastDelivery ? FAST_DELIVERY_FEE : 0;
+  const fastFee = items.reduce((s, i) => s + (i.fastDelivery && i.fastDeliveryPrice ? i.fastDeliveryPrice * i.qty : 0), 0);
   const grandTotal = subtotal + fastFee;
 
   if (items.length === 0) {
@@ -89,14 +86,14 @@ export default function CartPage() {
                 <Row label="GST" value={<span className="text-primary">Included</span>} />
                 <div className="my-2 border-t border-border" />
                 <Row label="Shipping" value={<span className="text-primary font-bold">FREE</span>} />
-                {fastEligible && (
-                  <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-2 text-xs">
-                    <label className="flex cursor-pointer items-center gap-2 font-semibold">
-                      <input type="checkbox" checked={fastDelivery} onChange={(e) => setFastDelivery(e.target.checked)} /> Fast Delivery
-                    </label>
-                    <span className="font-bold text-primary">+{formatINR(FAST_DELIVERY_FEE)}</span>
-                  </div>
-                )}
+                {items.filter((i) => i.fastDeliveryPrice).map((i) => (
+                  <label key={i.slug} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border p-2 text-xs">
+                    <span className="flex items-center gap-2 font-semibold">
+                      <input type="checkbox" checked={!!i.fastDelivery} onChange={(e) => setItemFastDelivery(i.slug, e.target.checked)} /> Fast Delivery: {i.name}
+                    </span>
+                    <span className="font-bold text-primary">+{formatINR((i.fastDeliveryPrice || 0) * i.qty)}</span>
+                  </label>
+                ))}
                 {fastFee > 0 && <Row label="Fast Delivery" value={formatINR(fastFee)} />}
               </dl>
 

@@ -1,4 +1,3 @@
-import { FAST_DELIVERY_FEE, FAST_DELIVERY_MIN_PRICE } from '@/lib/pricing';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminApi } from '@/lib/api';
@@ -7,7 +6,7 @@ import { formatOrderNo } from '@/lib/utils';
 import { Plus, Trash2, Save, PackagePlus, Loader2, Banknote, CreditCard, Search, PackageX, Check, AlertTriangle, Zap } from 'lucide-react';
 import Pagination, { paginate, sortNewestFirst } from './Pagination';
 
-type SelectedItem = { productId: string; quantity: number };
+type SelectedItem = { productId: string; quantity: number; fastDelivery?: boolean };
 type Address = { fullName: string; streetAddress: string; city: string; state: string; zipCode: string; phoneNumber: string };
 type SearchableOption = { value: string; label: string };
 type StuckDraft = {
@@ -97,7 +96,6 @@ export default function AdminMissedOrders() {
   const [paymentType, setPaymentType] = useState<'cod' | 'prepaid'>('cod');
   const [items, setItems] = useState<SelectedItem[]>([{ productId: '', quantity: 1 }]);
   const [razorpayPaymentId, setRazorpayPaymentId] = useState('');
-  const [fastDelivery, setFastDelivery] = useState(false);
   const [useSavedAddress, setUseSavedAddress] = useState(true);
   const [address, setAddress] = useState<Address>({ ...emptyAddress });
   const [stockEdits, setStockEdits] = useState<Record<string, string>>({});
@@ -143,11 +141,10 @@ export default function AdminMissedOrders() {
     return sum + price * (it.quantity || 1);
   }, 0);
 
-  const fastEligible = items.some((it) => {
-    const p = productMap.get(it.productId);
-    return p?.pricingMode === 'new' && (Number(p?.salePrice) || Number(p?.price) || 0) > FAST_DELIVERY_MIN_PRICE;
-  });
-  const fastFee = fastEligible && fastDelivery ? FAST_DELIVERY_FEE : 0;
+  const fastFee = items.reduce((s, it) => {
+    const fee = Number(productMap.get(it.productId)?.fastDeliveryPrice) || 0;
+    return s + (it.fastDelivery && fee > 0 ? fee * (it.quantity || 1) : 0);
+  }, 0);
   const total = itemsTotal + fastFee;
 
   const advance = Math.round(total * 0.25);
@@ -186,9 +183,8 @@ export default function AdminMissedOrders() {
       const payload: Record<string, unknown> = {
         userId,
         paymentType,
-        items: items.filter((it) => it.productId).map((it) => ({ productId: it.productId, quantity: it.quantity })),
+        items: items.filter((it) => it.productId).map((it) => ({ productId: it.productId, quantity: it.quantity, fastDelivery: !!it.fastDelivery })),
         totalPrice: itemsTotal,
-        fastDelivery: fastEligible && fastDelivery,
         codAdvanceAmount: paymentType === 'cod' ? advance : 0,
       };
       if (razorpayPaymentId.trim()) payload.razorpayPaymentId = razorpayPaymentId.trim();
@@ -421,12 +417,16 @@ export default function AdminMissedOrders() {
           </div>
 
           <div className="rounded-lg border border-border bg-surface/40 p-4 text-sm">
-            {fastEligible && (
-              <label className="mb-2 flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-border p-2 text-xs">
-                <span className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={fastDelivery} onChange={(e) => setFastDelivery(e.target.checked)} /> Fast Delivery</span>
-                <span className="font-bold text-primary">+{formatINR(FAST_DELIVERY_FEE)}</span>
-              </label>
-            )}
+            {items.map((it, idx) => {
+              const fee = Number(productMap.get(it.productId)?.fastDeliveryPrice) || 0;
+              if (!it.productId || fee <= 0) return null;
+              return (
+                <label key={idx} className="mb-2 flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-border p-2 text-xs">
+                  <span className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={!!it.fastDelivery} onChange={(e) => updateItem(idx, { fastDelivery: e.target.checked })} /> Fast Delivery: {String(productMap.get(it.productId)?.name || '')}</span>
+                  <span className="font-bold text-primary">+{formatINR(fee * (it.quantity || 1))}</span>
+                </label>
+              );
+            })}
             <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold">{formatINR(total)}</span></div>
             {paymentType === 'cod' ? (
               <>
