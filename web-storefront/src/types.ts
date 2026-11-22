@@ -15,6 +15,7 @@ export type Product = {
   salePrice?: number;
   dealEndsAt?: string;
   gstRate?: number;
+  pricingMode?: 'old' | 'new';
   margin?: number;
   shippingCost?: number;
   specifications?: { name: string; value: string }[];
@@ -33,6 +34,7 @@ export type CartItem = {
   image?: string;
   margin?: number;
   shippingCost?: number;
+  pricingMode?: 'old' | 'new';
 };
 
 export type User = {

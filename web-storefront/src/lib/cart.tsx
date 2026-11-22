@@ -81,6 +81,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       gstRate: item.product?.gstRate || 18,
       margin: Number(item.product?.margin) || 0,
       shippingCost: Number(item.product?.shippingCost) || 0,
+      pricingMode: (item.product?.pricingMode === 'new' ? 'new' : 'old') as 'old' | 'new',
       image: item.product?.images?.[0] || '',
     };
   };
@@ -104,6 +105,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         gstRate: Number(p.gstRate) || i.gstRate,
         margin: Number(p.margin) || 0,
         shippingCost: Number(p.shippingCost) || 0,
+        pricingMode: (p.pricingMode === 'new' ? 'new' : 'old') as 'old' | 'new',
         image: p.images?.[0] || i.image,
       };
     });
@@ -181,6 +183,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           gstRate: p.gstRate || 18,
           margin: Number(p.margin) || 0,
           shippingCost: Number(p.shippingCost) || 0,
+          pricingMode: (p.pricingMode === 'new' ? 'new' : 'old') as 'old' | 'new',
           image: p.images?.[0] || '',
         }];
     itemsRef.current = next;

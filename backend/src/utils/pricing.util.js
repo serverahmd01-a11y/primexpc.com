@@ -1,12 +1,5 @@
-import { getSetting } from "../models/setting.model.js";
-
-// Pricing mode is switched by admin (Settings -> Pricing mode).
-// "old" = existing behaviour (price is treated exactly as before).
-// "new" = price is GST-inclusive; GST is charged only on (margin - shipping).
+// Per-product pricing: each product has pricingMode "old" | "new".
+// "old" = price as before (GST inside price, taxed on full price).
+// "new" = GST only on (margin - shipping). Fast delivery applies to "new" items.
 export const FAST_DELIVERY_FEE = 1000;
 export const FAST_DELIVERY_MIN_PRICE = 30000;
-
-export async function getPricingMode() {
-  const v = await getSetting("pricing_mode", "old");
-  return v === "new" ? "new" : "old";
-}

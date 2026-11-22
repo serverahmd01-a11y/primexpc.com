@@ -65,6 +65,11 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 18,
     },
+    pricingMode: {
+      type: String,
+      enum: ["old", "new"],
+      default: "old",
+    },
     margin: {
       type: Number,
       default: 0,

@@ -45,6 +45,7 @@ export default function AdminProducts() {
   const [salePrice, setSalePrice] = useState('');
   const [dealEndsAt, setDealEndsAt] = useState('');
   const [gstRate, setGstRate] = useState('18');
+  const [pricingMode, setPricingMode] = useState<'old' | 'new'>('old');
   const [margin, setMargin] = useState('');
   const [shippingCost, setShippingCost] = useState('');
   const [productCondition, setProductCondition] = useState('new');
@@ -93,6 +94,7 @@ export default function AdminProducts() {
     setFeatured(p.featured || false); setSalePrice(p.salePrice ? String(p.salePrice) : '');
     setDealEndsAt(p.dealEndsAt ? toIstDateTimeLocal(p.dealEndsAt) : '');
     setGstRate(String(p.gstRate || 18)); setProductCondition(p.condition || 'new');
+    setPricingMode(p.pricingMode === 'new' ? 'new' : 'old');
     setMargin(String(p.margin || '')); setShippingCost(String(p.shippingCost || ''));
     setSpecifications(p.specifications || []);
     setMsg(null); setShowModal(true);
@@ -121,6 +123,7 @@ export default function AdminProducts() {
       // code sent it raw and the server's UTC timezone shifted the deal time).
       if (dealEndsAt) fd.append('dealEndsAt', new Date(`${dealEndsAt}:00+05:30`).toISOString());
       fd.append('gstRate', gstRate || '18');
+      fd.append('pricingMode', pricingMode);
       fd.append('margin', margin || '0');
       fd.append('shippingCost', shippingCost || '0');
       fd.append('condition', productCondition || 'new');
@@ -296,16 +299,33 @@ export default function AdminProducts() {
                   <option value="28">28%</option>
                 </select>
               </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pricing mode</label>
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  {(['old', 'new'] as const).map((m) => (
+                    <button
+                      type="button"
+                      key={m}
+                      onClick={() => setPricingMode(m)}
+                      className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${pricingMode === m ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}
+                    >
+                      {m === 'old' ? 'Old pricing' : 'New pricing'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {pricingMode === 'new' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Margin ₹ (new pricing)</label>
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Margin ₹</label>
                   <input type="number" min="0" value={margin} onChange={(e) => setMargin(e.target.value)} className="mt-1 h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none focus:border-primary" />
                 </div>
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Shipping ₹ (new pricing)</label>
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Shipping ₹</label>
                   <input type="number" min="0" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} className="mt-1 h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none focus:border-primary" />
                 </div>
               </div>
+              )}
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Specifications</label>
                 <div className="mt-1 space-y-2">

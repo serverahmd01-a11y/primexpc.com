@@ -9,7 +9,7 @@ import { User } from "../models/user.model.js";
 import { generateOrderNumber } from "../utils/order.util.js";
 import { sendOrderNotification, dispatchNotification, LOW_STOCK_THRESHOLD } from "../config/notify.js";
 import { logger } from "../utils/logger.js";
-import { getPricingMode, FAST_DELIVERY_FEE, FAST_DELIVERY_MIN_PRICE } from "../utils/pricing.util.js";
+import { FAST_DELIVERY_FEE, FAST_DELIVERY_MIN_PRICE } from "../utils/pricing.util.js";
 
 async function getRazorpayInstance() {
   const keys = await getRazorpayKeys();
@@ -102,6 +102,7 @@ async function buildValidatedItems(rawItems, user, fastDelivery = false) {
       quantity,
       condition: product.condition || "new",
       gstRate: product.gstRate || 18,
+      pricingMode: product.pricingMode === "new" ? "new" : "old",
       margin: Number(product.margin) || 0,
       shippingCost: Number(product.shippingCost) || 0,
       image: product.images?.[0] || "",
@@ -110,13 +111,12 @@ async function buildValidatedItems(rawItems, user, fastDelivery = false) {
 
   // Fast delivery: only in "new" pricing mode, only when the cart has an item
   // priced above the threshold, and only if the customer ticked the option.
-  const pricingMode = await getPricingMode();
   const fastDeliveryFee =
-    pricingMode === "new" && fastDelivery && items.some((i) => i.price > FAST_DELIVERY_MIN_PRICE)
+    fastDelivery && items.some((i) => i.pricingMode === "new" && i.price > FAST_DELIVERY_MIN_PRICE)
       ? FAST_DELIVERY_FEE
       : 0;
 
-  return { items, subtotal, pricingMode, fastDeliveryFee };
+  return { items, subtotal, fastDeliveryFee };
 }
 
 /**
@@ -259,7 +259,7 @@ export async function createRazorpayOrder(req, res) {
       return res.status(400).json({ error: `Shipping address incomplete: ${missingAddr.join(", ")}` });
     }
 
-    const { items: validatedItems, subtotal, pricingMode, fastDeliveryFee, error } = await buildValidatedItems(items, user, !!req.body.fastDelivery);
+    const { items: validatedItems, subtotal, fastDeliveryFee, error } = await buildValidatedItems(items, user, !!req.body.fastDelivery);
     if (error) {
       return res.status(400).json({ error });
     }
@@ -279,7 +279,6 @@ export async function createRazorpayOrder(req, res) {
         phoneNumber: String(addr.phoneNumber).trim(),
       },
       totalPrice: total,
-      pricingMode,
       fastDeliveryFee,
       isDraft: true,
       paymentType: isCod ? "cod" : "prepaid",

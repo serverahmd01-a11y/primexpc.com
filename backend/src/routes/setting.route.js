@@ -8,7 +8,6 @@ import { sendTestEmail, sendEmail } from "../config/email.js";
 import { getSetting } from "../models/setting.model.js";
 import { upload } from "../middleware/multer.middleware.js";
 import { logger, istDateString } from "../utils/logger.js";
-import { getPricingMode } from "../utils/pricing.util.js";
 
 const router = Router();
 
@@ -126,11 +125,6 @@ router.post("/contact", async (req, res) => {
     console.error("Contact form error:", err);
     res.status(500).json({ error: "Failed to send message" });
   }
-});
-
-// Storefront reads this to know which price model to show ("old" | "new").
-router.get("/public/pricing", async (req, res) => {
-  res.json({ mode: await getPricingMode() });
 });
 
 router.get("/public/store-info", async (req, res) => {

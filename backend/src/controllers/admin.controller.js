@@ -10,6 +10,7 @@ import { generateOrderNumber } from "../utils/order.util.js";
 import { sendOrderNotification, dispatchNotification, LOW_STOCK_THRESHOLD } from "../config/notify.js";
 import { finalizeDraftOrder } from "./payment.controller.js";
 import { logger } from "../utils/logger.js";
+import { FAST_DELIVERY_FEE, FAST_DELIVERY_MIN_PRICE } from "../utils/pricing.util.js";
 import { ENV } from "../config/env.js";
 
 function actor(req) {
@@ -53,7 +54,7 @@ function deleteImageFile(filename) {
 
 export async function createProduct(req, res) {
   try {
-    const { name, description, price, stock, category, subCategory, condition, featured, salePrice, dealEndsAt, gstRate, specifications, margin, shippingCost } = req.body;
+    const { name, description, price, stock, category, subCategory, condition, featured, salePrice, dealEndsAt, gstRate, specifications, margin, shippingCost, pricingMode } = req.body;
 
     const imageUrls = (req.files || []).filter((f) => f.mimetype.startsWith("image/")).map((file) => getImageUrl(file.filename));
     if (imageUrls.length > 3) {
@@ -78,6 +79,7 @@ export async function createProduct(req, res) {
       salePrice: salePrice ? parseFloat(salePrice) : 0,
       dealEndsAt: dealEndsAt || null,
       gstRate: gstRate ? parseFloat(gstRate) : 18,
+      pricingMode: pricingMode === "new" ? "new" : "old",
       margin: margin ? parseFloat(margin) : 0,
       shippingCost: shippingCost ? parseFloat(shippingCost) : 0,
       specifications: specs,
@@ -106,7 +108,7 @@ export async function getAllProducts(_, res) {
 export async function updateProduct(req, res) {
   try {
     const { id } = req.params;
-    const { name, description, price, stock, category, subCategory, condition, featured, salePrice, dealEndsAt, gstRate, specifications, margin, shippingCost } = req.body;
+    const { name, description, price, stock, category, subCategory, condition, featured, salePrice, dealEndsAt, gstRate, specifications, margin, shippingCost, pricingMode } = req.body;
 
     console.log("[updateProduct] id:", id, "| body keys:", Object.keys(req.body || {}), "| stock:", stock, "| files:", req.files?.length);
 
@@ -128,6 +130,7 @@ export async function updateProduct(req, res) {
     if (salePrice !== undefined) product.salePrice = salePrice ? parseFloat(salePrice) : 0;
     if (dealEndsAt !== undefined) product.dealEndsAt = dealEndsAt || null;
     if (gstRate !== undefined) product.gstRate = gstRate ? parseFloat(gstRate) : 18;
+    if (pricingMode !== undefined) product.pricingMode = pricingMode === "new" ? "new" : "old";
     if (margin !== undefined) product.margin = margin ? parseFloat(margin) : 0;
     if (shippingCost !== undefined) product.shippingCost = shippingCost ? parseFloat(shippingCost) : 0;
     if (specifications !== undefined) {
@@ -671,7 +674,7 @@ export async function finalizeStuckDraft(req, res) {
 
 export async function createMissedOrder(req, res) {
   try {
-    const { userId, items, paymentType, totalPrice, codAdvanceAmount, razorpayPaymentId, shippingAddress } = req.body;
+    const { userId, items, paymentType, totalPrice, codAdvanceAmount, razorpayPaymentId, shippingAddress, fastDelivery } = req.body;
 
     if (!userId) return res.status(400).json({ error: "User is required" });
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -703,11 +706,19 @@ export async function createMissedOrder(req, res) {
         quantity,
         condition: product.condition || "new",
         gstRate: product.gstRate || 18,
+        pricingMode: product.pricingMode === "new" ? "new" : "old",
+        margin: Number(product.margin) || 0,
+        shippingCost: Number(product.shippingCost) || 0,
         image: product.images?.[0] || "",
       });
     }
 
-    const total = totalPrice ? parseFloat(totalPrice) : computedTotal;
+    const fastDeliveryFee =
+      (fastDelivery === true || fastDelivery === "true") &&
+      orderItems.some((i) => i.pricingMode === "new" && i.price > FAST_DELIVERY_MIN_PRICE)
+        ? FAST_DELIVERY_FEE
+        : 0;
+    const total = (totalPrice ? parseFloat(totalPrice) : computedTotal) + fastDeliveryFee;
     const isCod = paymentType === "cod";
 
     let address;
@@ -747,6 +758,7 @@ export async function createMissedOrder(req, res) {
       orderItems,
       shippingAddress: address,
       totalPrice: total,
+      fastDeliveryFee,
       isMissedOrder: true,
       paymentResult: {
         id: razorpayPaymentId || `manual_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,

@@ -6,7 +6,6 @@ import { Link } from 'react-router-dom';
 
 const TABS = [
   { id: 'store', label: 'Store', icon: Store },
-  { id: 'pricing', label: 'Pricing', icon: Key },
   { id: 'payment', label: 'Payment', icon: Key },
   { id: 'shipping', label: 'Shipping', icon: Truck },
   { id: 'email', label: 'Email', icon: Mail },
@@ -44,7 +43,6 @@ export default function AdminSettings() {
   const [storeWhatsapp, setStoreWhatsapp] = useState('');
   const [storeGstin, setStoreGstin] = useState('24ABCFP8750F1Z8');
   const [gstRates, setGstRates] = useState([{ name: '', rate: '' }]);
-  const [pricingMode, setPricingMode] = useState<'old' | 'new'>('old');
   const [socialLinks, setSocialLinks] = useState<{ platform: string; url: string; active: boolean }[]>([
     { platform: 'Instagram', url: '', active: true },
     { platform: 'Facebook', url: '', active: true },
@@ -91,7 +89,6 @@ export default function AdminSettings() {
       setStoreWhatsapp(r.data.store_whatsapp || '');
       setStoreGstin(r.data.store_gstin || '24ABCFP8750F1Z8');
 
-      setPricingMode(r.data.pricing_mode === 'new' ? 'new' : 'old');
       try { setGstRates(JSON.parse(r.data.gst_rates) || []); } catch { setGstRates([{ name: '18%', rate: '18' }]); }
       try { setSocialLinks(JSON.parse(r.data.social_links || '[]')); } catch {}
       try { setFooterLinks(JSON.parse(r.data.custom_footer_links || '[]')); } catch {}
@@ -115,7 +112,6 @@ export default function AdminSettings() {
         store_email: storeEmail,
         store_hours: storeHours, store_whatsapp: storeWhatsapp, store_gstin: storeGstin,
         gst_rates: JSON.stringify(gstRates),
-        pricing_mode: pricingMode,
         social_links: JSON.stringify(socialLinks),
         custom_footer_links: JSON.stringify(footerLinks),
       });
@@ -234,26 +230,6 @@ export default function AdminSettings() {
               </div>
             </Section>
           </>
-        )}
-
-        {tab === 'pricing' && (
-          <Section icon={Key} title="Pricing mode">
-            <p className="text-xs text-muted-foreground">
-              Old = current pricing, nothing changes. New = margin and shipping pricing, GST only on (margin minus shipping), and the Fast Delivery option above ₹30,000. Press Save after choosing.
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {(['old', 'new'] as const).map((m) => (
-                <button
-                  type="button"
-                  key={m}
-                  onClick={() => setPricingMode(m)}
-                  className={`rounded-lg border px-4 py-3 text-sm font-bold transition ${pricingMode === m ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}
-                >
-                  {m === 'old' ? 'Old pricing' : 'New pricing'}
-                </button>
-              ))}
-            </div>
-          </Section>
         )}
 
         {tab === 'payment' && (

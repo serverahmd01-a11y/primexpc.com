@@ -2,12 +2,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Minus, Plus, Trash2, ArrowRight, ShoppingCart, ShieldCheck, Truck, Cpu } from 'lucide-react';
 import { useCart, formatINR } from '@/lib/cart';
 import { getImageUrl } from '@/lib/utils';
+import { useFastDelivery, FAST_DELIVERY_FEE, FAST_DELIVERY_MIN_PRICE } from '@/lib/pricing';
 
 export default function CartPage() {
   const { items, count, subtotal, setQty, remove } = useCart();
   const navigate = useNavigate();
 
-  const grandTotal = subtotal;
+  const fastEligible = items.some((i) => i.pricingMode === 'new' && i.price > FAST_DELIVERY_MIN_PRICE);
+  const [fastDelivery, setFastDelivery] = useFastDelivery();
+  const fastFee = fastEligible && fastDelivery ? FAST_DELIVERY_FEE : 0;
+  const grandTotal = subtotal + fastFee;
 
   if (items.length === 0) {
     return (
@@ -85,6 +89,15 @@ export default function CartPage() {
                 <Row label="GST" value={<span className="text-primary">Included</span>} />
                 <div className="my-2 border-t border-border" />
                 <Row label="Shipping" value={<span className="text-primary font-bold">FREE</span>} />
+                {fastEligible && (
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-2 text-xs">
+                    <label className="flex cursor-pointer items-center gap-2 font-semibold">
+                      <input type="checkbox" checked={fastDelivery} onChange={(e) => setFastDelivery(e.target.checked)} /> Fast Delivery
+                    </label>
+                    <span className="font-bold text-primary">+{formatINR(FAST_DELIVERY_FEE)}</span>
+                  </div>
+                )}
+                {fastFee > 0 && <Row label="Fast Delivery" value={formatINR(fastFee)} />}
               </dl>
 
               <div className="mt-5 flex items-baseline justify-between border-t border-border pt-4">

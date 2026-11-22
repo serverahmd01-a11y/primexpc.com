@@ -1,3 +1,4 @@
+import { FAST_DELIVERY_FEE, FAST_DELIVERY_MIN_PRICE } from '@/lib/pricing';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminApi } from '@/lib/api';
@@ -96,6 +97,7 @@ export default function AdminMissedOrders() {
   const [paymentType, setPaymentType] = useState<'cod' | 'prepaid'>('cod');
   const [items, setItems] = useState<SelectedItem[]>([{ productId: '', quantity: 1 }]);
   const [razorpayPaymentId, setRazorpayPaymentId] = useState('');
+  const [fastDelivery, setFastDelivery] = useState(false);
   const [useSavedAddress, setUseSavedAddress] = useState(true);
   const [address, setAddress] = useState<Address>({ ...emptyAddress });
   const [stockEdits, setStockEdits] = useState<Record<string, string>>({});
@@ -135,11 +137,18 @@ export default function AdminMissedOrders() {
     return map;
   }, [products]);
 
-  const total = items.reduce((sum, it) => {
+  const itemsTotal = items.reduce((sum, it) => {
     const p = productMap.get(it.productId);
     const price = Number(p?.salePrice) || Number(p?.price) || 0;
     return sum + price * (it.quantity || 1);
   }, 0);
+
+  const fastEligible = items.some((it) => {
+    const p = productMap.get(it.productId);
+    return p?.pricingMode === 'new' && (Number(p?.salePrice) || Number(p?.price) || 0) > FAST_DELIVERY_MIN_PRICE;
+  });
+  const fastFee = fastEligible && fastDelivery ? FAST_DELIVERY_FEE : 0;
+  const total = itemsTotal + fastFee;
 
   const advance = Math.round(total * 0.25);
   const balance = Math.max(0, total - advance);
@@ -178,7 +187,8 @@ export default function AdminMissedOrders() {
         userId,
         paymentType,
         items: items.filter((it) => it.productId).map((it) => ({ productId: it.productId, quantity: it.quantity })),
-        totalPrice: total,
+        totalPrice: itemsTotal,
+        fastDelivery: fastEligible && fastDelivery,
         codAdvanceAmount: paymentType === 'cod' ? advance : 0,
       };
       if (razorpayPaymentId.trim()) payload.razorpayPaymentId = razorpayPaymentId.trim();
@@ -411,6 +421,12 @@ export default function AdminMissedOrders() {
           </div>
 
           <div className="rounded-lg border border-border bg-surface/40 p-4 text-sm">
+            {fastEligible && (
+              <label className="mb-2 flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-border p-2 text-xs">
+                <span className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={fastDelivery} onChange={(e) => setFastDelivery(e.target.checked)} /> Fast Delivery</span>
+                <span className="font-bold text-primary">+{formatINR(FAST_DELIVERY_FEE)}</span>
+              </label>
+            )}
             <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold">{formatINR(total)}</span></div>
             {paymentType === 'cod' ? (
               <>

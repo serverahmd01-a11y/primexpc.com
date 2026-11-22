@@ -3,7 +3,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Check, CreditCard, Landmark, Wallet, Zap, ShieldCheck, Banknote, MemoryStick, Loader2, Download } from 'lucide-react';
 import { useCart, formatINR } from '@/lib/cart';
 import { getImageUrl, downloadInvoice as genInvoice, formatOrderNo } from '@/lib/utils';
-import { usePricingMode, invoiceItemsFor, FAST_DELIVERY_FEE, FAST_DELIVERY_MIN_PRICE } from '@/lib/pricing';
+import { invoiceItemsFor, useFastDelivery, FAST_DELIVERY_FEE, FAST_DELIVERY_MIN_PRICE } from '@/lib/pricing';
 import { useAuth } from '@/lib/auth';
 import { userApi, paymentApi } from '@/lib/api';
 import api from '@/lib/api';
@@ -48,10 +48,9 @@ export default function Checkout() {
   const [paidTotal, setPaidTotal] = useState(0);
   const [wasCod, setWasCod] = useState(false);
   const invoiceItemsRef = useRef(items);
-  const invoiceMetaRef = useRef<{ mode: 'old' | 'new'; fee: number }>({ mode: 'old', fee: 0 });
-  const pricingMode = usePricingMode();
-  const [fastDelivery, setFastDelivery] = useState(false);
-  const fastEligible = pricingMode === 'new' && items.some((i) => i.price > FAST_DELIVERY_MIN_PRICE);
+  const invoiceMetaRef = useRef<{ fee: number }>({ fee: 0 });
+  const [fastDelivery, setFastDelivery] = useFastDelivery();
+  const fastEligible = items.some((i) => i.pricingMode === 'new' && i.price > FAST_DELIVERY_MIN_PRICE);
   const fastFee = fastEligible && fastDelivery ? FAST_DELIVERY_FEE : 0;
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState('');
@@ -91,7 +90,7 @@ export default function Checkout() {
 
   const finish = (id: string, num?: unknown, cod = false, advanceAmount = 0) => {
     invoiceItemsRef.current = items;
-    invoiceMetaRef.current = { mode: pricingMode, fee: fastFee };
+    invoiceMetaRef.current = { fee: fastFee };
     setOrderId(id);
     setOrderNumber(num ? formatOrderNo(num) : '');
     setPaidTotal(cod ? advanceAmount : total);
@@ -106,8 +105,7 @@ export default function Checkout() {
     genInvoice({
       orderId: orderNumber || orderId,
       items: invoiceItemsFor(
-        invoiceItemsRef.current.map((i) => ({ name: i.name, price: i.price, quantity: i.qty, gstRate: i.gstRate, margin: i.margin, shippingCost: i.shippingCost })),
-        invoiceMetaRef.current.mode,
+        invoiceItemsRef.current.map((i) => ({ name: i.name, price: i.price, quantity: i.qty, gstRate: i.gstRate, margin: i.margin, shippingCost: i.shippingCost, pricingMode: i.pricingMode })),
         invoiceMetaRef.current.fee,
       ),
       customerName: form.name,
