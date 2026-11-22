@@ -54,7 +54,7 @@ const numberToWords = (num: number): string => {
   return numToWords(Math.round(num));
 };
 
-export type InvoiceItem = { name: string; price: number; quantity: number; gstRate?: number };
+export type InvoiceItem = { name: string; price: number; quantity: number; gstRate?: number; taxableOverride?: number };
 
 export type InvoiceData = {
   orderId: string;
@@ -97,8 +97,9 @@ export function generateInvoice(data: InvoiceData, existingWindow?: Window | nul
     const sellingPrice = item.price;
     const gstRate = item.gstRate || 18;
     const total = sellingPrice * item.quantity;
-    const taxable = Math.round(total / (1 + gstRate / 100));
-    const gst = total - taxable;
+    // Normal: price is GST-inclusive, so back-calculate. "new" pricing: taxable is margin - shipping.
+    const taxable = item.taxableOverride !== undefined ? Math.round(item.taxableOverride) : Math.round(total / (1 + gstRate / 100));
+    const gst = item.taxableOverride !== undefined ? Math.round(taxable * gstRate / 100) : total - taxable;
     const cgst = Math.round(gst / 2);
     const sgst = gst - cgst;
 

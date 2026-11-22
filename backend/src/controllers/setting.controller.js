@@ -33,6 +33,7 @@ export async function getSettings(req, res) {
         { name: "18%", rate: 18 },
         { name: "28%", rate: 28 },
       ])),
+      pricing_mode: await getSetting("pricing_mode", "old"),
       social_links: await getSetting("social_links", "[]"),
       custom_footer_links: await getSetting("custom_footer_links", "[]"),
       notify_telegram_enabled: await getSetting("notify_telegram_enabled", "false"),
@@ -61,7 +62,7 @@ export async function updateSettings(req, res) {
       social_links, custom_footer_links,
       notify_telegram_enabled, notify_telegram_token, notify_telegram_chat,
       notify_whatsapp_enabled, notify_whatsapp_phone, notify_whatsapp_apikey,
-      notify_email_enabled, notify_email_to,
+      notify_email_enabled, notify_email_to, pricing_mode,
     } = req.body;
 
     const set = async (key, val, masked = "••••••••") => {
@@ -71,6 +72,9 @@ export async function updateSettings(req, res) {
     };
 
     await set("razorpay_key_id", razorpay_key_id, "");
+    if (pricing_mode === "old" || pricing_mode === "new") {
+      await set("pricing_mode", pricing_mode, "");
+    }
     await set("razorpay_key_secret", razorpay_key_secret);
     await set("razorpay_webhook_secret", razorpay_webhook_secret);
     await set("shiprocket_email", shiprocket_email, "");

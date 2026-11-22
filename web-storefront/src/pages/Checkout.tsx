@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Check, CreditCard, Landmark, Wallet, Zap, ShieldCheck, Banknote, MemoryStick, Loader2, Download } from 'lucide-react';
 import { useCart, formatINR } from '@/lib/cart';
 import { getImageUrl, downloadInvoice as genInvoice, formatOrderNo } from '@/lib/utils';
+import { usePricingMode, invoiceItemsFor, FAST_DELIVERY_FEE, FAST_DELIVERY_MIN_PRICE } from '@/lib/pricing';
 import { useAuth } from '@/lib/auth';
 import { userApi, paymentApi } from '@/lib/api';
 import api from '@/lib/api';
@@ -47,6 +48,11 @@ export default function Checkout() {
   const [paidTotal, setPaidTotal] = useState(0);
   const [wasCod, setWasCod] = useState(false);
   const invoiceItemsRef = useRef(items);
+  const invoiceMetaRef = useRef<{ mode: 'old' | 'new'; fee: number }>({ mode: 'old', fee: 0 });
+  const pricingMode = usePricingMode();
+  const [fastDelivery, setFastDelivery] = useState(false);
+  const fastEligible = pricingMode === 'new' && items.some((i) => i.price > FAST_DELIVERY_MIN_PRICE);
+  const fastFee = fastEligible && fastDelivery ? FAST_DELIVERY_FEE : 0;
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [form, setForm] = useState({ name: '', email: '', phone: '', pincode: '', street: '', landmark: '', city: '', state: '', country: 'India' });
@@ -81,10 +87,11 @@ export default function Checkout() {
     setForm({ ...form, name: a.fullName, phone: a.phoneNumber || '', pincode: a.zipCode, street: a.streetAddress, landmark: '', city: a.city, state: a.state, country: 'India' });
   };
 
-  const total = subtotal;
+  const total = subtotal + fastFee;
 
   const finish = (id: string, num?: unknown, cod = false, advanceAmount = 0) => {
     invoiceItemsRef.current = items;
+    invoiceMetaRef.current = { mode: pricingMode, fee: fastFee };
     setOrderId(id);
     setOrderNumber(num ? formatOrderNo(num) : '');
     setPaidTotal(cod ? advanceAmount : total);
@@ -98,7 +105,11 @@ export default function Checkout() {
   const downloadInvoice = () => {
     genInvoice({
       orderId: orderNumber || orderId,
-      items: invoiceItemsRef.current.map((i) => ({ name: i.name, price: i.price, quantity: i.qty, gstRate: i.gstRate })),
+      items: invoiceItemsFor(
+        invoiceItemsRef.current.map((i) => ({ name: i.name, price: i.price, quantity: i.qty, gstRate: i.gstRate, margin: i.margin, shippingCost: i.shippingCost })),
+        invoiceMetaRef.current.mode,
+        invoiceMetaRef.current.fee,
+      ),
       customerName: form.name,
       customerPhone: form.phone,
       customerAddress: [form.street, form.city, form.state, form.pincode].filter(Boolean).join(', '),
@@ -142,6 +153,7 @@ export default function Checkout() {
         items: items.map((i) => ({ productId: i.productId || i.slug, quantity: i.qty })),
         shippingAddress: { fullName: form.name, streetAddress: form.street, city: form.city, state: form.state, zipCode: form.pincode, phoneNumber: form.phone },
         receipt: 'rcpt_' + Date.now().toString(36),
+        fastDelivery: fastEligible && fastDelivery,
       });
       const info: CheckoutInfo = { isCod: !!order.isCod, advanceAmount: order.advanceAmount || 0, total };
 
@@ -278,6 +290,15 @@ export default function Checkout() {
               <dl className="mt-4 space-y-2 text-sm">
                 <Row label="Subtotal" value={formatINR(subtotal)} />
                 <Row label="Shipping" value="FREE" />
+                {fastEligible && (
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-2 text-xs">
+                    <label className="flex cursor-pointer items-center gap-2 font-semibold">
+                      <input type="checkbox" checked={fastDelivery} onChange={(e) => setFastDelivery(e.target.checked)} /> Fast Delivery
+                    </label>
+                    <span className="font-bold text-primary">+{formatINR(FAST_DELIVERY_FEE)}</span>
+                  </div>
+                )}
+                {fastFee > 0 && <Row label="Fast Delivery" value={formatINR(fastFee)} />}
                 <Row label="GST" value={<span className="text-primary">Included</span>} />
               </dl>
               <div className="mt-4 flex items-baseline justify-between border-t border-border pt-4"><span className="font-display text-sm font-bold uppercase tracking-wider">Total</span><span className="font-display text-2xl font-black text-primary">{formatINR(total)}</span></div>

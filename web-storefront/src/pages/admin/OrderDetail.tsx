@@ -1,4 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
+import { invoiceItemsFor } from '@/lib/pricing';
 import { useEffect, useState } from 'react';
 import { formatINR } from '@/lib/cart';
 import { formatOrderNo, getImageUrl, downloadInvoice, safeTrackingUrl } from '@/lib/utils';
@@ -103,7 +104,7 @@ const saveTracking = async () => {
             <div className="mt-2 space-y-1.5 text-xs">
               <div className="flex justify-between"><span className="text-muted-foreground">Advance Paid</span><span className={o.advancePaid ? 'text-primary font-bold' : 'text-amber-600 font-bold'}>{o.advancePaid ? 'Yes' : 'Pending'}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Advance Amount</span><span className="font-bold">{formatINR(Number(o.codAdvanceAmount) || 0)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Balance Amount</span><span className="font-bold">{formatINR(Math.max(0, (Number(o.totalPrice) || 0) - (Number(o.codAdvanceAmount) || 0)))}</span></div>
+              {Number(o.fastDeliveryFee) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Fast Delivery</span><span className="font-semibold">{formatINR(Number(o.fastDeliveryFee))}</span></div>}<div className="flex justify-between"><span className="text-muted-foreground">Balance Amount</span><span className="font-bold">{formatINR(Math.max(0, (Number(o.totalPrice) || 0) - (Number(o.codAdvanceAmount) || 0)))}</span></div>
               <div className="flex justify-between items-center gap-2">
                 <span className="text-muted-foreground">Balance Received</span>
                 <span className={`font-bold ${o.balancePaid ? 'text-primary' : 'text-amber-600'}`}>{o.balancePaid ? 'Yes' : 'No'}</span>
@@ -203,7 +204,7 @@ const saveTracking = async () => {
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="flex items-center justify-between border-b border-border pb-2 mb-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-primary">Items ({items.length})</h3>
-          <button onClick={() => downloadInvoice({ orderId: formatOrderNo(o.orderNumber) || String(o._id), customerName: String(addr.fullName || ''), customerPhone: String(addr.phoneNumber || ''), customerAddress: [addr.streetAddress, addr.city, addr.state, addr.zipCode].filter(Boolean).join(', '), items: items.map((i: Record<string, unknown>) => ({ name: String(i.name), price: Number(i.price) || 0, quantity: Number(i.quantity) || 1, gstRate: Number(i.gstRate) || 18 })) })} className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"><Download className="h-3.5 w-3.5" /> Invoice</button>
+          <button onClick={() => downloadInvoice({ orderId: formatOrderNo(o.orderNumber) || String(o._id), customerName: String(addr.fullName || ''), customerPhone: String(addr.phoneNumber || ''), customerAddress: [addr.streetAddress, addr.city, addr.state, addr.zipCode].filter(Boolean).join(', '), items: invoiceItemsFor(items.map((i: Record<string, unknown>) => ({ name: String(i.name), price: Number(i.price) || 0, quantity: Number(i.quantity) || 1, gstRate: Number(i.gstRate) || 18, margin: Number(i.margin) || 0, shippingCost: Number(i.shippingCost) || 0 })), o.pricingMode === 'new' ? 'new' : 'old', Number(o.fastDeliveryFee) || 0) })} className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"><Download className="h-3.5 w-3.5" /> Invoice</button>
         </div>
         <div className="space-y-2">
           {items.map((item, i) => (

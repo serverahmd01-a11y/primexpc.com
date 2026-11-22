@@ -65,6 +65,16 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 18,
     },
+    margin: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    shippingCost: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     condition: {
       type: String,
       enum: ["new", "refurbished"],

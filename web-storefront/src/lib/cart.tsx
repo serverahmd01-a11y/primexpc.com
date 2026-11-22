@@ -79,6 +79,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       priceLabel: formatINR(item.product?.salePrice || item.product?.price || item.price || 0),
       qty: item.quantity,
       gstRate: item.product?.gstRate || 18,
+      margin: Number(item.product?.margin) || 0,
+      shippingCost: Number(item.product?.shippingCost) || 0,
       image: item.product?.images?.[0] || '',
     };
   };
@@ -100,6 +102,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         price,
         priceLabel: formatINR(price),
         gstRate: Number(p.gstRate) || i.gstRate,
+        margin: Number(p.margin) || 0,
+        shippingCost: Number(p.shippingCost) || 0,
         image: p.images?.[0] || i.image,
       };
     });
@@ -175,6 +179,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
           priceLabel: formatINR(p.salePrice || p.price),
           qty,
           gstRate: p.gstRate || 18,
+          margin: Number(p.margin) || 0,
+          shippingCost: Number(p.shippingCost) || 0,
           image: p.images?.[0] || '',
         }];
     itemsRef.current = next;

@@ -53,7 +53,7 @@ function deleteImageFile(filename) {
 
 export async function createProduct(req, res) {
   try {
-    const { name, description, price, stock, category, subCategory, condition, featured, salePrice, dealEndsAt, gstRate, specifications } = req.body;
+    const { name, description, price, stock, category, subCategory, condition, featured, salePrice, dealEndsAt, gstRate, specifications, margin, shippingCost } = req.body;
 
     const imageUrls = (req.files || []).filter((f) => f.mimetype.startsWith("image/")).map((file) => getImageUrl(file.filename));
     if (imageUrls.length > 3) {
@@ -78,6 +78,8 @@ export async function createProduct(req, res) {
       salePrice: salePrice ? parseFloat(salePrice) : 0,
       dealEndsAt: dealEndsAt || null,
       gstRate: gstRate ? parseFloat(gstRate) : 18,
+      margin: margin ? parseFloat(margin) : 0,
+      shippingCost: shippingCost ? parseFloat(shippingCost) : 0,
       specifications: specs,
       video: getVideoUrl(req.files),
     });
@@ -104,7 +106,7 @@ export async function getAllProducts(_, res) {
 export async function updateProduct(req, res) {
   try {
     const { id } = req.params;
-    const { name, description, price, stock, category, subCategory, condition, featured, salePrice, dealEndsAt, gstRate, specifications } = req.body;
+    const { name, description, price, stock, category, subCategory, condition, featured, salePrice, dealEndsAt, gstRate, specifications, margin, shippingCost } = req.body;
 
     console.log("[updateProduct] id:", id, "| body keys:", Object.keys(req.body || {}), "| stock:", stock, "| files:", req.files?.length);
 
@@ -126,6 +128,8 @@ export async function updateProduct(req, res) {
     if (salePrice !== undefined) product.salePrice = salePrice ? parseFloat(salePrice) : 0;
     if (dealEndsAt !== undefined) product.dealEndsAt = dealEndsAt || null;
     if (gstRate !== undefined) product.gstRate = gstRate ? parseFloat(gstRate) : 18;
+    if (margin !== undefined) product.margin = margin ? parseFloat(margin) : 0;
+    if (shippingCost !== undefined) product.shippingCost = shippingCost ? parseFloat(shippingCost) : 0;
     if (specifications !== undefined) {
       try { product.specifications = JSON.parse(specifications); } catch { product.specifications = []; }
     }

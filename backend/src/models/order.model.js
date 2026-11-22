@@ -29,6 +29,14 @@ const orderItemSchema = new mongoose.Schema({
     type: Number,
     default: 18,
   },
+  margin: {
+    type: Number,
+    default: 0,
+  },
+  shippingCost: {
+    type: Number,
+    default: 0,
+  },
   image: {
     type: String,
     default: "",
@@ -82,6 +90,15 @@ const orderSchema = new mongoose.Schema(
     paymentResult: {
       id: String,
       status: String,
+    },
+    pricingMode: {
+      type: String,
+      enum: ["old", "new"],
+      default: "old",
+    },
+    fastDeliveryFee: {
+      type: Number,
+      default: 0,
     },
     totalPrice: {
       type: Number,

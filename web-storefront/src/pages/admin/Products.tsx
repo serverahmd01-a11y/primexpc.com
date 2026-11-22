@@ -45,6 +45,8 @@ export default function AdminProducts() {
   const [salePrice, setSalePrice] = useState('');
   const [dealEndsAt, setDealEndsAt] = useState('');
   const [gstRate, setGstRate] = useState('18');
+  const [margin, setMargin] = useState('');
+  const [shippingCost, setShippingCost] = useState('');
   const [productCondition, setProductCondition] = useState('new');
   const [specifications, setSpecifications] = useState<{ name: string; value: string }[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
@@ -91,6 +93,7 @@ export default function AdminProducts() {
     setFeatured(p.featured || false); setSalePrice(p.salePrice ? String(p.salePrice) : '');
     setDealEndsAt(p.dealEndsAt ? toIstDateTimeLocal(p.dealEndsAt) : '');
     setGstRate(String(p.gstRate || 18)); setProductCondition(p.condition || 'new');
+    setMargin(String(p.margin || '')); setShippingCost(String(p.shippingCost || ''));
     setSpecifications(p.specifications || []);
     setMsg(null); setShowModal(true);
   };
@@ -118,6 +121,8 @@ export default function AdminProducts() {
       // code sent it raw and the server's UTC timezone shifted the deal time).
       if (dealEndsAt) fd.append('dealEndsAt', new Date(`${dealEndsAt}:00+05:30`).toISOString());
       fd.append('gstRate', gstRate || '18');
+      fd.append('margin', margin || '0');
+      fd.append('shippingCost', shippingCost || '0');
       fd.append('condition', productCondition || 'new');
       fd.append('specifications', JSON.stringify(specifications));
       if (removedImages.length > 0) fd.append('removedImages', JSON.stringify(removedImages));
@@ -290,6 +295,16 @@ export default function AdminProducts() {
                   <option value="18">18%</option>
                   <option value="28">28%</option>
                 </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Margin ₹ (new pricing)</label>
+                  <input type="number" min="0" value={margin} onChange={(e) => setMargin(e.target.value)} className="mt-1 h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none focus:border-primary" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Shipping ₹ (new pricing)</label>
+                  <input type="number" min="0" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} className="mt-1 h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none focus:border-primary" />
+                </div>
               </div>
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Specifications</label>
